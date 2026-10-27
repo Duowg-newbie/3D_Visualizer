@@ -1,91 +1,214 @@
-<!DOCTYPE html>
-<html lang="vi" class="dark">
+<!doctype html>
+<html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3DGS / PointCloud / Mesh Studio</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <!-- Three.js & OrbitControls & Loaders -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0b0e14;
-            color: #e2e8f0;
-            overflow: hidden;
-            user-select: none;
-        }
-        .mono {
-            font-family: 'JetBrains Mono', monospace;
-        }
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #111622;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #2d3748;
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #4a5568;
-        }
-        /* Custom Range Input */
-        input[type=range] {
-            -webkit-appearance: none;
-            background: transparent;
-        }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%;
-            height: 6px;
-            cursor: pointer;
-            background: #1e293b;
-            border-radius: 999px;
-            border: 1px solid #334155;
-        }
-        input[type=range]::-webkit-slider-thumb {
-            height: 16px;
-            width: 16px;
-            border-radius: 50%;
-            background: #38bdf8;
-            cursor: pointer;
-            -webkit-appearance: none;
-            margin-top: -6px;
-            box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
-            transition: transform 0.1s ease;
-        }
-        input[type=range]::-webkit-slider-thumb:hover {
-            transform: scale(1.15);
-            background: #7dd3fc;
-        }
-        .drop-overlay {
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(8px);
-        }
-        .glass-panel {
-            background: rgba(17, 24, 39, 0.88);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3D Viewer</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+        "@sparkjsdev/spark": "https://cdn.jsdelivr.net/npm/@sparkjsdev/spark@2.3.1/dist/spark.module.js"
+      }
+    }
+  </script>
 </head>
-<body class="h-screen w-screen flex flex-col">
+<body>
+<div id="app">
+  <aside id="panel">
+    <header class="brand">
+      <div class="logo">◆</div>
+      <div>
+        <h1>3D Viewer</h1>
+        <p>Mesh · Gaussian Splat · Point Cloud</p>
+      </div>
+    </header>
 
-    <!-- Top Navigation Bar -->
-    <header class="h-14 bg-[#0f1420] border-b border-slate-800/80 px-4 flex items-center justify-between z-20 shrink-0">
-        <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-                <i class="fa-solid fa-cubes-stacked text-white text-lg"></i>
-            </div>
-            <div>
-                <div class="flex items-center gap-2">
-                    <h1 class="font-bold text-sm tracking-wide text-white
+    <section class="group">
+      <h2>Tải mô hình</h2>
+      <div class="row">
+        <label class="btn primary grow">Chọn file…
+          <input id="fileInput" type="file" multiple hidden>
+        </label>
+        <label class="btn grow">Chọn thư mục…
+          <input id="dirInput" type="file" webkitdirectory multiple hidden>
+        </label>
+      </div>
+      <div class="row">
+        <input id="urlInput" type="url" placeholder="Hoặc dán URL (.glb, .ply, .spz…)">
+        <button id="urlBtn" class="btn">Mở</button>
+      </div>
+      <p class="hint">Kéo thả file vào khung xem. Với OBJ/glTF có texture rời, chọn cùng lúc file mô hình + .mtl/.bin + ảnh (hoặc chọn cả thư mục).</p>
+      <div class="label">Mẫu thử</div>
+      <div class="chips">
+        <button class="chip" data-sample="helmet">Mũ (glTF + texture)</button>
+        <button class="chip" data-sample="butterfly">Bướm (Gaussian)</button>
+        <button class="chip" data-sample="points">Point cloud</button>
+        <button class="chip" data-sample="knot">Mesh UV</button>
+      </div>
+      <p class="formats">glb · gltf · obj(+mtl) · fbx · stl · ply · pcd · xyz/pts/txt · splat · ksplat · spz · sog</p>
+    </section>
+
+    <section class="group">
+      <h2>Hiển thị</h2>
+      <div class="seg" id="modeSeg">
+        <button data-mode="texture" class="on" title="Vật liệu gốc (PBR)">Texture</button>
+        <button data-mode="unlit" title="Chỉ màu texture, không ánh sáng">Unlit</button>
+        <button data-mode="clay" title="Màu xám để xem hình khối">Clay</button>
+        <button data-mode="normal" title="Hiển thị pháp tuyến">Normal</button>
+        <button data-mode="uv" title="Ô bàn cờ theo UV">UV</button>
+      </div>
+      <label class="check"><input type="checkbox" id="wireChk"> Khung dây (W)</label>
+      <label class="check"><input type="checkbox" id="sideChk"> Hiện cả 2 mặt</label>
+      <label class="check"><input type="checkbox" id="animChk" checked> Chạy animation</label>
+      <label class="slider">Kích thước điểm <span id="ptVal">1.0×</span>
+        <input type="range" id="ptSize" min="0.1" max="10" step="0.1" value="1">
+      </label>
+      <label class="slider">Độ mờ splat <span id="opVal">100%</span>
+        <input type="range" id="splatOp" min="0" max="1" step="0.01" value="1">
+      </label>
+    </section>
+
+    <section class="group">
+      <h2>Hướng vật thể</h2>
+      <label class="field">Trục "lên" của file
+        <select id="upSelect">
+          <option value="+Y">+Y (mặc định glTF)</option>
+          <option value="+Z">+Z (Blender, CAD, scan)</option>
+          <option value="-Y">−Y (bị ngược / 3DGS)</option>
+          <option value="-Z">−Z</option>
+          <option value="+X">+X</option>
+          <option value="-X">−X</option>
+          <option value="custom" disabled>Tuỳ chỉnh</option>
+        </select>
+      </label>
+      <div class="label">Xoay 90°</div>
+      <div class="rotgrid">
+        <span class="ax x">X</span><button class="btn" data-rot="x,-1">↺</button><button class="btn" data-rot="x,1">↻</button>
+        <span class="ax y">Y</span><button class="btn" data-rot="y,-1">↺</button><button class="btn" data-rot="y,1">↻</button>
+        <span class="ax z">Z</span><button class="btn" data-rot="z,-1">↺</button><button class="btn" data-rot="z,1">↻</button>
+      </div>
+      <div class="row">
+        <button id="flipBtn" class="btn grow">Lật ngược (X 180°)</button>
+        <button id="resetOrient" class="btn">Đặt lại (R)</button>
+      </div>
+      <div class="readout">Góc hiện tại: <b id="eulerOut">0°, 0°, 0°</b></div>
+    </section>
+
+    <section class="group">
+      <h2>Camera</h2>
+      <div class="views">
+        <button class="btn" data-view="front">Trước</button>
+        <button class="btn" data-view="back">Sau</button>
+        <button class="btn" data-view="left">Trái</button>
+        <button class="btn" data-view="right">Phải</button>
+        <button class="btn" data-view="top">Trên</button>
+        <button class="btn" data-view="bottom">Dưới</button>
+        <button class="btn" data-view="iso">3/4</button>
+        <button class="btn primary" id="fitBtn">Vừa khung (F)</button>
+      </div>
+      <label class="field">Hướng "lên" của camera
+        <select id="camUp">
+          <option value="+Y">+Y</option>
+          <option value="+Z">+Z</option>
+          <option value="-Y">−Y (lộn ngược)</option>
+          <option value="-Z">−Z</option>
+          <option value="+X">+X</option>
+          <option value="-X">−X</option>
+        </select>
+      </label>
+      <label class="slider">Nghiêng camera (roll) <span id="rollVal">0°</span>
+        <input type="range" id="roll" min="-180" max="180" step="1" value="0">
+      </label>
+      <div class="row">
+        <button class="btn grow" id="roll180">Lật camera 180°</button>
+        <button class="btn" id="rollReset">Roll = 0</button>
+      </div>
+      <label class="slider">Góc nhìn (FOV) <span id="fovVal">45°</span>
+        <input type="range" id="fov" min="10" max="110" step="1" value="45">
+      </label>
+      <label class="check"><input type="checkbox" id="autoRot"> Tự xoay quanh vật thể</label>
+    </section>
+
+    <section class="group">
+      <h2>Cảnh</h2>
+      <div class="row wrap">
+        <label class="check"><input type="checkbox" id="gridChk" checked> Lưới (G)</label>
+        <label class="check"><input type="checkbox" id="axesChk"> Trục toạ độ</label>
+        <label class="check"><input type="checkbox" id="bboxChk"> Hộp bao</label>
+        <label class="check"><input type="checkbox" id="envChk" checked> Ánh sáng môi trường</label>
+        <label class="check"><input type="checkbox" id="gizmoChk" checked> Gizmo hướng</label>
+      </div>
+      <label class="field">Màu nền
+        <span class="row">
+          <input type="color" id="bgColor" value="#1b1d22">
+          <button class="swatch" data-bg="#1b1d22" style="--c:#1b1d22"></button>
+          <button class="swatch" data-bg="#3a3f47" style="--c:#3a3f47"></button>
+          <button class="swatch" data-bg="#b9bec6" style="--c:#b9bec6"></button>
+          <button class="swatch" data-bg="#ffffff" style="--c:#ffffff"></button>
+          <button class="swatch" data-bg="#000000" style="--c:#000000"></button>
+        </span>
+      </label>
+      <label class="slider">Cường độ đèn <span id="lightVal">1.0</span>
+        <input type="range" id="light" min="0" max="4" step="0.05" value="1">
+      </label>
+      <label class="field">Tone mapping
+        <select id="toneSel">
+          <option value="neutral">Neutral</option>
+          <option value="aces">ACES Filmic</option>
+          <option value="agx">AgX</option>
+          <option value="none">Không</option>
+        </select>
+      </label>
+      <label class="slider">Phơi sáng <span id="expVal">1.0</span>
+        <input type="range" id="exposure" min="0.1" max="3" step="0.05" value="1">
+      </label>
+    </section>
+
+    <section class="group">
+      <h2>Texture <span id="texCount" class="badge">0</span></h2>
+      <div id="texList" class="texlist"><p class="hint">Chưa có texture.</p></div>
+      <label class="btn grow">Gán ảnh làm texture…
+        <input id="texInput" type="file" accept="image/*" hidden>
+      </label>
+    </section>
+  </aside>
+
+  <main id="viewport">
+    <div id="info" class="info hidden"></div>
+    <div class="toolbar">
+      <button id="panelToggle" class="tbtn" title="Ẩn/hiện bảng điều khiển">☰</button>
+      <button id="shotBtn" class="tbtn" title="Chụp ảnh màn hình">📷</button>
+      <button id="fsBtn" class="tbtn" title="Toàn màn hình">⛶</button>
+    </div>
+    <div id="gizmoHit" title="Bấm trục để xoay nhanh camera"></div>
+    <div id="dropOverlay"><div>Thả file vào đây</div></div>
+    <div id="loading" class="hidden"><div class="spinner"></div><span id="loadingText">Đang tải…</span></div>
+    <div id="empty" class="empty">
+      <p><b>Kéo thả mô hình 3D vào đây</b></p>
+      <p>hoặc chọn một mẫu thử ở bảng bên trái</p>
+    </div>
+    <p class="keys">Chuột trái: xoay · Chuột phải: dời · Lăn: zoom · F: vừa khung · W: khung dây · G: lưới · R: đặt lại hướng</p>
+  </main>
+</div>
+
+<div id="texModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <b id="texTitle">Texture</b>
+      <span class="spacer"></span>
+      <button class="btn" id="texDownload">Tải ảnh</button>
+      <button class="btn" id="texClose">Đóng</button>
+    </div>
+    <div class="modal-body"><canvas id="texCanvas"></canvas></div>
+    <div id="texMeta" class="modal-meta"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
