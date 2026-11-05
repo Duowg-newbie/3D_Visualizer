@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+venv/
+.venv/
+
+# Hệ điều hành & IDE
+.vscode/
+.idea/
+Thumbs.db
+ehthumbs.db
+.DS_Store
+
+# Không bỏ qua thư mục data/ vì đây là nơi chứa file 3D cho GitHub Pages!
+!data/

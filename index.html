@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Face 3D Viewer</title>
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+      "@mkkellogg/gaussian-splats-3d": "https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Face 3D Viewer</div>
+    <div class="actions">
+      <button id="serverBtn" class="btn primary">☁ Thư viện server</button>
+      <label class="btn">
+        Upload lên server
+        <input id="uploadFolderInput" type="file" webkitdirectory directory multiple hidden />
+      </label>
+      <label class="btn">
+        Mở thư mục
+        <input id="folderInput" type="file" webkitdirectory directory multiple hidden />
+      </label>
+      <label class="btn">
+        Mở file
+        <input id="fileInput" type="file" multiple hidden />
+      </label>
+      <select id="groupMode" title="Cách xác định ID">
+        <option value="auto">Nhóm ID: tự động</option>
+        <option value="folder1">ID = thư mục cấp 1</option>
+        <option value="folder2">ID = thư mục cấp 2</option>
+        <option value="name">ID = tên file</option>
+      </select>
+      <input id="search" type="search" placeholder="Tìm ID…" />
+      <input id="cardSize" type="range" min="120" max="320" value="190" title="Kích thước ảnh" />
+    </div>
+  </header>
+
+  <!-- Thư viện ID -->
+  <main id="galleryView" class="view">
+    <div id="stats" class="stats"></div>
+    <div id="empty" class="empty">
+      <h2>Kéo thả một thư mục vào đây hoặc bấm “Mở thư mục”</h2>
+      <p>Mỗi thư mục con được coi là một ID khuôn mặt. Chỉ ảnh trong thư mục <code>image</code> có ID trùng với model mới được dùng làm ảnh đại diện;
+        nếu không tìm thấy ảnh khớp, thư viện sẽ hiển thị “Không có ảnh”.</p>
+      <p class="muted">Hỗ trợ: OBJ (+MTL, texture), PLY (mesh / point cloud / Gaussian splat), GLB/GLTF, FBX, STL, PCD, XYZ, SPLAT, KSPLAT, SPZ · Video: MP4, WEBM, MOV, M4V, MKV, OGV</p>
+    </div>
+    <div id="grid" class="grid"></div>
+  </main>
+
+  <!-- Trình xem 3D -->
+  <section id="viewerView" class="view hidden">
+    <div class="viewer-bar">
+      <button id="backBtn" class="btn">← Thư viện</button>
+      <button id="prevId" class="btn icon" title="ID trước (PageUp)">‹</button>
+      <div id="viewerTitle" class="viewer-title"></div>
+      <button id="nextId" class="btn icon" title="ID sau (PageDown)">›</button>
+      <div id="fileTabs" class="file-tabs"></div>
+    </div>
+    <div class="viewer-body">
+      <div id="canvasWrap" class="canvas-wrap">
+        <img id="inset" class="inset" alt="" />
+        <div id="loading" class="loading hidden">Đang tải…</div>
+        <div id="error" class="error hidden"></div>
+        <video id="video" class="video-player hidden" controls loop muted playsinline></video>
+        <div class="hint only3d">Chuột trái: xoay · Phải: di chuyển · Cuộn: zoom · F: canh giữa · 1–6: góc nhìn · R: tự xoay</div>
+        <div class="hint only-video">Space: phát/dừng · ←/→: lùi/tới 1 khung · [ ]: chậm/nhanh</div>
+      </div>
+
+      <aside class="panel">
+        <section class="only-video">
+          <h3>Video 360°</h3>
+          <div class="row">
+            <span class="label">Tốc độ</span>
+            <select id="videoRate">
+              <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option>
+              <option value="1.5">1.5×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option>
+            </select>
+          </div>
+          <div class="row">
+            <span class="label">Tua</span>
+            <input id="videoSeek" type="range" min="0" max="1" step="0.001" value="0" />
+          </div>
+          <label class="check"><input id="videoLoop" type="checkbox" checked /> Lặp lại</label>
+          <div class="row">
+            <button id="videoPlay" class="btn sm">Phát / Dừng</button>
+          </div>
+        </section>
+
+        <section class="only3d">
+          <h3>Hướng vật thể</h3>
+          <select id="orientPreset">
+            <option value="">— Preset —</option>
+            <option value="identity">Y lên (mặc định)</option>
+            <option value="zup">Z lên → Y lên</option>
+            <option value="-zup">-Z lên → Y lên</option>
+            <option value="xup">X lên → Y lên</option>
+            <option value="opencv">OpenCV (Y xuống, Z tới) → OpenGL</option>
+            <option value="upsideDown">Lật ngược (giữ mặt trước)</option>
+            <option value="backward">Quay 180° (mặt sau → trước)</option>
+          </select>
+          <div class="row">
+            <span class="label">Bước</span>
+            <select id="rotStep">
+              <option>90</option><option>45</option><option>15</option><option>5</option>
+            </select>
+            <span class="muted">độ</span>
+          </div>
+          <div class="rot-grid">
+            <span>X</span><button data-rot="x,-1" class="btn sm">⟲</button><button data-rot="x,1" class="btn sm">⟳</button>
+            <span>Y</span><button data-rot="y,-1" class="btn sm">⟲</button><button data-rot="y,1" class="btn sm">⟳</button>
+            <span>Z</span><button data-rot="z,-1" class="btn sm">⟲</button><button data-rot="z,1" class="btn sm">⟳</button>
+          </div>
+          <div class="row">
+            <button id="resetOrient" class="btn sm">Đặt lại hướng</button>
+          </div>
+          <label class="check"><input id="keepOrient" type="checkbox" checked /> Giữ hướng này cho mọi mô hình</label>
+        </section>
+
+        <section class="only3d">
+          <h3>Góc nhìn camera</h3>
+          <div class="view-grid">
+            <button data-view="front" class="btn sm">Trước</button>
+            <button data-view="back" class="btn sm">Sau</button>
+            <button data-view="left" class="btn sm">Trái</button>
+            <button data-view="right" class="btn sm">Phải</button>
+            <button data-view="top" class="btn sm">Trên</button>
+            <button data-view="bottom" class="btn sm">Dưới</button>
+          </div>
+          <div class="row">
+            <span class="label">FOV</span>
+            <input id="fov" type="range" min="10" max="90" value="35" />
+          </div>
+          <label class="check"><input id="autoRotate" type="checkbox" /> Tự xoay 360°</label>
+          <div class="row">
+            <span class="label">Tốc độ</span>
+            <input id="rotateSpeed" type="range" min="2" max="60" step="1" value="12" />
+            <span id="rotateSpeedLabel" class="muted speed-label"></span>
+          </div>
+        </section>
+
+        <section class="only3d">
+          <h3>Hiển thị</h3>
+          <div class="row">
+            <span class="label">Chế độ</span>
+            <select id="shading">
+              <option value="original">Texture / màu gốc</option>
+              <option value="shaded">Xám (hình học)</option>
+              <option value="normal">Pháp tuyến</option>
+            </select>
+          </div>
+          <div class="row">
+            <span class="label">Texture</span>
+            <select id="textureSelect"><option value="">(theo file)</option></select>
+          </div>
+          <label class="check"><input id="wireframe" type="checkbox" /> Wireframe</label>
+          <label class="check"><input id="doubleSide" type="checkbox" checked /> Hiện cả 2 mặt</label>
+          <div class="row">
+            <span class="label">Cỡ điểm</span>
+            <input id="pointSize" type="range" min="0.1" max="5" step="0.1" value="1" />
+          </div>
+          <div class="row">
+            <span class="label">Ánh sáng</span>
+            <input id="light" type="range" min="0" max="3" step="0.05" value="1" />
+          </div>
+        </section>
+
+        <section>
+          <h3>Cảnh</h3>
+          <div class="row">
+            <span class="label">Nền</span>
+            <input id="bgColor" type="color" value="#1b1d22" />
+          </div>
+          <label class="check only3d"><input id="showGrid" type="checkbox" checked /> Lưới sàn</label>
+          <label class="check only3d"><input id="showAxes" type="checkbox" /> Trục XYZ</label>
+          <label class="check"><input id="showInset" type="checkbox" checked /> Ảnh chính diện ở góc</label>
+          <div class="row">
+            <button id="screenshot" class="btn sm">Chụp ảnh PNG</button>
+          </div>
+        </section>
+
+        <section>
+          <h3>Thông tin</h3>
+          <div id="info" class="info"></div>
+        </section>
+      </aside>
+    </div>
+  </section>
+
+  <!-- Xem ảnh của ID -->
+  <div id="lightbox" class="lightbox hidden">
+    <div class="lightbox-inner">
+      <div class="lightbox-head">
+        <strong id="lbTitle"></strong>
+        <span class="muted">Bấm vào ảnh nhỏ để đặt làm ảnh chính diện</span>
+        <div class="lb-zoom-controls" aria-label="Điều chỉnh độ phóng ảnh">
+          <button id="lbZoomOut" class="btn sm" type="button" title="Thu nhỏ ảnh">−</button>
+          <button id="lbZoomReset" class="btn sm" type="button" title="Đặt lại kích thước">100%</button>
+          <button id="lbZoomIn" class="btn sm" type="button" title="Phóng to ảnh">+</button>
+          <span id="lbZoomLabel" class="muted">100%</span>
+        </div>
+        <button id="lbClose" class="btn sm">Đóng</button>
+      </div>
+        <div id="lbImageViewport" class="lb-image-viewport">
+          <img id="lbMain" class="lb-main" alt="" />
+        </div>
+        <div id="lbThumbs" class="lb-thumbs"></div>
+    </div>
+  </div>
+
+  <div id="dropOverlay" class="drop-overlay hidden">Thả thư mục / file vào đây</div>
+
+  <!-- Modal quản lý server -->
+  <div id="serverModal" class="server-modal hidden">
+    <div class="server-modal-inner">
+      <div class="server-modal-head">
+        <strong>☁ Thư viện trên Server</strong>
+        <button id="serverModalClose" class="btn sm">✕ Đóng</button>
+      </div>
+      <div class="server-modal-body">
+        <div id="serverUploadStatus" class="server-upload-status hidden"></div>
+        <div id="serverDatasetList" class="server-dataset-list">
+          <p class="muted" style="padding:12px">Đang tải danh sách…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
