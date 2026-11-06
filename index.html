@@ -19,12 +19,7 @@
   <header class="topbar">
     <div class="brand">Face 3D Viewer</div>
     <div class="actions">
-      <button id="serverBtn" class="btn primary">☁ Thư viện server</button>
-      <label class="btn">
-        Upload lên server
-        <input id="uploadFolderInput" type="file" webkitdirectory directory multiple hidden />
-      </label>
-      <label class="btn">
+      <label class="btn primary">
         Mở thư mục
         <input id="folderInput" type="file" webkitdirectory directory multiple hidden />
       </label>
@@ -216,21 +211,6 @@
   </div>
 
   <div id="dropOverlay" class="drop-overlay hidden">Thả thư mục / file vào đây</div>
-
-  <!-- Modal quản lý server -->
-  <div id="serverModal" class="server-modal hidden">
-    <div class="server-modal-inner">
-      <div class="server-modal-head">
-        <strong>☁ Thư viện trên Server</strong>
-        <button id="serverModalClose" class="btn sm">✕ Đóng</button>
-      </div>
-      <div class="server-modal-body">
-        <div id="serverUploadStatus" class="server-upload-status hidden"></div>
-        <div id="serverDatasetList" class="server-dataset-list">
-          <p class="muted" style="padding:12px">Đang tải danh sách…</p>
-        </div>
-      </div>
-    </div>
   </div>
 
   <script type="module" src="app.js"></script>

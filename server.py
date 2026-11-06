@@ -1,147 +1,60 @@
 """
-Face 3D Viewer — Server (Flask)
-  python server.py [port]
-
-Thư mục lưu trữ: ./data/
-  data/<tên_dataset>/<các file 3D, ảnh, ...>
-
-API:
-  GET  /api/datasets          → danh sách dataset đã upload
-  GET  /api/files/<dataset>   → cây file của dataset
-  POST /api/upload            → upload nhiều file (giữ đường dẫn tương đối)
-  GET  /data/<path>           → phục vụ file tĩnh từ thư mục data/
-  GET  /                      → trang chính (index.html)
+Face 3D Viewer — Máy chủ chạy thử nghiệm cục bộ (Pure Python, không cần cài thư viện)
+Cách dùng:
+    python server.py [cổng]
+    (hoặc nhấp đúp vào start.bat)
 """
 
-import os
 import sys
-import json
-import mimetypes
+import http.server
+import socketserver
+import webbrowser
+import threading
 from pathlib import Path
-from flask import Flask, request, jsonify, send_from_directory, send_file, abort
 
-PORT   = next((int(a) for a in sys.argv[1:] if a.isdigit()), 8000)
-ROOT   = Path(__file__).resolve().parent
-DATA   = ROOT / "data"
-DATA.mkdir(exist_ok=True)
+PORT = next((int(a) for a in sys.argv[1:] if a.isdigit()), 8000)
+ROOT = Path(__file__).resolve().parent
 
-app = Flask(__name__, static_folder=str(ROOT), static_url_path="")
+class CustomHandler(http.server.SimpleHTTPRequestHandler):
+    extensions_map = {
+        **http.server.SimpleHTTPRequestHandler.extensions_map,
+        ".js": "text/javascript",
+        ".mjs": "text/javascript",
+        ".css": "text/css",
+        ".html": "text/html",
+        ".json": "application/json",
+        ".wasm": "application/wasm",
+        ".ply": "application/octet-stream",
+        ".obj": "text/plain",
+        ".mtl": "text/plain",
+        ".splat": "application/octet-stream",
+        ".ksplat": "application/octet-stream",
+        ".spz": "application/octet-stream",
+        ".glb": "model/gltf-binary",
+        ".gltf": "model/gltf+json",
+    }
 
-# Đảm bảo MIME đúng (đặc biệt trên Windows)
-mimetypes.add_type("text/javascript",   ".js")
-mimetypes.add_type("text/javascript",   ".mjs")
-mimetypes.add_type("application/wasm",  ".wasm")
-mimetypes.add_type("model/gltf-binary", ".glb")
-mimetypes.add_type("model/obj",         ".obj")
-mimetypes.add_type("model/stl",         ".stl")
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(ROOT), **kwargs)
 
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        super().end_headers()
 
-# ─────────────────────────── Static frontend ────────────────────────────────
-
-@app.route("/")
-def index():
-    return send_file(ROOT / "index.html")
-
-
-@app.route("/<path:filename>")
-def static_files(filename):
-    """Phục vụ JS/CSS/... của frontend."""
-    safe = ROOT / filename
-    if safe.is_file() and not str(safe).startswith(str(DATA)):
-        resp = send_file(safe)
-        resp.headers["Cache-Control"] = "no-cache"
-        return resp
-    abort(404)
-
-
-# ─────────────────────────── Phục vụ file data ──────────────────────────────
-
-@app.route("/data/<path:filepath>")
-def serve_data(filepath):
-    """Trả về file trong thư mục data/ (ảnh, model 3D, …)."""
-    full = (DATA / filepath).resolve()
-    if not str(full).startswith(str(DATA.resolve())):
-        abort(403)
-    if not full.is_file():
-        abort(404)
-    mime, _ = mimetypes.guess_type(str(full))
-    resp = send_file(full, mimetype=mime or "application/octet-stream")
-    resp.headers["Cache-Control"] = "public, max-age=86400"
-    return resp
-
-
-# ─────────────────────────── API ────────────────────────────────────────────
-
-@app.route("/api/datasets")
-def api_datasets():
-    """Danh sách dataset (thư mục con trực tiếp trong data/)."""
-    datasets = sorted(
-        d.name for d in DATA.iterdir() if d.is_dir()
-    )
-    return jsonify(datasets)
-
-
-@app.route("/api/files/<dataset>")
-def api_files(dataset):
-    """Cây file của một dataset, trả về danh sách đường dẫn tương đối."""
-    base = (DATA / dataset).resolve()
-    if not str(base).startswith(str(DATA.resolve())) or not base.is_dir():
-        abort(404)
-    files = []
-    for p in sorted(base.rglob("*")):
-        if p.is_file():
-            rel = p.relative_to(DATA).as_posix()   # vd. "mydata/ID/images/face.jpg"
-            files.append(rel)
-    return jsonify(files)
-
-
-@app.route("/api/upload", methods=["POST"])
-def api_upload():
-    """
-    Upload nhiều file, giữ nguyên đường dẫn tương đối.
-    Form field: files[] (multipart) + mỗi file có filename = đường dẫn tương đối.
-    Frontend gửi: formData.append('files[]', file, file.webkitRelativePath)
-    """
-    uploaded_files = request.files.getlist("files[]")
-    if not uploaded_files:
-        return jsonify({"error": "Không có file nào được gửi"}), 400
-
-    saved = []
-    errors = []
-    for f in uploaded_files:
-        rel = f.filename.replace("\\", "/").lstrip("/")
-        if not rel:
-            continue
-        # Chống path traversal
-        dest = (DATA / rel).resolve()
-        if not str(dest).startswith(str(DATA.resolve())):
-            errors.append(f"Bị chặn: {rel}")
-            continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        f.save(str(dest))
-        saved.append(rel)
-
-    return jsonify({"saved": len(saved), "files": saved, "errors": errors})
-
-
-@app.route("/api/delete/<dataset>", methods=["DELETE"])
-def api_delete(dataset):
-    """Xoá toàn bộ một dataset."""
-    import shutil
-    base = (DATA / dataset).resolve()
-    if not str(base).startswith(str(DATA.resolve())) or not base.is_dir():
-        abort(404)
-    shutil.rmtree(base)
-    return jsonify({"deleted": dataset})
-
-
-# ─────────────────────────── Chạy ───────────────────────────────────────────
+def main():
+    with socketserver.ThreadingTCPServer(("", PORT), CustomHandler) as httpd:
+        url = f"http://localhost:{PORT}/"
+        print("=" * 60)
+        print(f" FACE 3D VIEWER DANG CHAY TAI: {url}")
+        print(" Nhan Ctrl+C de dung server.")
+        print("=" * 60)
+        if "--no-browser" not in sys.argv:
+            threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\nDa dung server.")
 
 if __name__ == "__main__":
-    import webbrowser, threading
-    url = f"http://localhost:{PORT}/"
-    print(f"Face 3D Viewer: {url}  (Ctrl+C để dừng)")
-    print(f"Dữ liệu lưu tại: {DATA}")
-    if "--no-browser" not in sys.argv:
-        threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    app.run(host="0.0.0.0", port=PORT, debug=False, threaded=True)
+    main()
