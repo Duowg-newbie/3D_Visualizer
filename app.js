@@ -1,6 +1,6 @@
 import { buildDataset, entriesFromDrop, entriesFromFileList, saveCoverOverride } from './dataset.js';
 import { Viewer, ORIENT_PRESETS } from './viewer.js';
-import { fetchStaticManifest, fetchDatasets, fetchEntries, uploadFiles, deleteDataset } from './server-api.js';
+import { fetchStaticManifest } from './server-api.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
