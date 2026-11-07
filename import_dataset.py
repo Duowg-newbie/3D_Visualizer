@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
 r"""
 Tự động đồng bộ dữ liệu từ thư mục kết quả infer (ví dụ D:\Dataset\results_dataset)
 vào thư mục data/ của trang web:
 - Tự động lấy file 3D (pc.ply, obj, glb,...) của từng mô hình
 - Tự động lấy ảnh gốc tương ứng trong thư mục images/
+- Tự động lấy video tương ứng trong thư mục videos/ (nếu có)
 - Tự động bỏ qua các file thừa (high_stage, low_stage, timing.json)
 - Tự động cập nhật data/manifest.json
 """
@@ -24,9 +24,10 @@ DATA_DIR = ROOT / "data"
 # Đường dẫn mặc định đến bộ kết quả infer của bạn
 DEFAULT_SOURCE = Path(r"D:\Dataset\results_dataset")
 
-# Các đuôi 3D được lấy
+# Các đuôi file được hỗ trợ
 MODEL_EXTS = {".ply", ".obj", ".glb", ".gltf", ".splat", ".ksplat", ".spz", ".fbx", ".stl"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+VIDEO_EXTS = {".mp4", ".webm", ".mov", ".m4v"}
 
 def sync_data(source_path: Path):
     if not source_path.exists():
@@ -41,19 +42,25 @@ def sync_data(source_path: Path):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     images_dst = DATA_DIR / "images"
     images_dst.mkdir(parents=True, exist_ok=True)
+    videos_dst = DATA_DIR / "videos"
+    videos_dst.mkdir(parents=True, exist_ok=True)
 
     images_src = source_path / "images"
     has_images_src = images_src.is_dir()
 
+    videos_src = source_path / "videos"
+    has_videos_src = videos_src.is_dir()
+
     copied_models = 0
     copied_images = 0
+    copied_videos = 0
     skipped_folders = 0
 
     # Duyệt qua các thư mục con trong results_dataset
     for item in sorted(source_path.iterdir()):
         if not item.is_dir():
             continue
-        if item.name.lower() == "images":
+        if item.name.lower() in {"images", "videos"}:
             continue
 
         model_id = item.name
@@ -83,9 +90,22 @@ def sync_data(source_path: Path):
                     copied_images += 1
                     break
 
+        # Tìm video gốc trong videos/ khớp với model_id (nếu có)
+        if has_videos_src:
+            for ext in VIDEO_EXTS:
+                vid_candidate = videos_src / f"{model_id}{ext}"
+                if vid_candidate.exists():
+                    dst_vid = videos_dst / vid_candidate.name
+                    if not dst_vid.exists() or dst_vid.stat().st_size != vid_candidate.stat().st_size:
+                        shutil.copy2(vid_candidate, dst_vid)
+                    copied_videos += 1
+                    break
+
     print(f"[OK] Da xu ly thanh cong:")
     print(f"     - So file 3D da lay : {copied_models}")
     print(f"     - So anh dai dien goc: {copied_images}")
+    if copied_videos > 0:
+        print(f"     - So file video da lay: {copied_videos}")
     if skipped_folders > 0:
         print(f"     - Bo qua {skipped_folders} thu muc khong co file 3D.")
     print("     - Da bo qua toan bo high_stage, low_stage, timing.json.")

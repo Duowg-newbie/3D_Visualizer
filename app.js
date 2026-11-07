@@ -20,6 +20,7 @@ const state = {
   dataset: null,
   filtered: [],
   current: null, // { group, model }
+  currentTask: '3d', // '3d' hoặc 'video'
 };
 let viewer = null;
 const imageUrls = new Map();
@@ -102,6 +103,121 @@ const io = new IntersectionObserver((items) => {
   }
 }, { rootMargin: '400px' });
 
+
+// ================================================================== 2 Task Navigation
+
+function setTask(task) {
+  state.currentTask = task;
+  store.set('currentTask', task);
+  const is3D = task === '3d';
+
+  $('taskTab3D').classList.toggle('active', is3D);
+  $('taskTab3D').setAttribute('aria-selected', String(is3D));
+  $('taskTabVideo').classList.toggle('active', !is3D);
+  $('taskTabVideo').setAttribute('aria-selected', String(!is3D));
+
+  // Cập nhật giao diện thư viện hoặc trình xem
+  if (!$('viewerView').classList.contains('hidden') && state.current) {
+    updateViewerForTask();
+  } else {
+    renderGallery();
+  }
+}
+
+$('taskTab3D').addEventListener('click', () => setTask('3d'));
+$('taskTabVideo').addEventListener('click', () => setTask('video'));
+state.currentTask = store.get('currentTask', '3d');
+$('taskTab3D').classList.toggle('active', state.currentTask === '3d');
+$('taskTabVideo').classList.toggle('active', state.currentTask === 'video');
+
+function updateViewerForTask() {
+  if (!viewer || !state.current) return;
+  const isVideoTask = state.currentTask === 'video';
+  const isVideoFile = state.current.model.kind === 'video';
+
+  $('turntablePanel').classList.toggle('hidden', !isVideoTask || isVideoFile);
+  document.querySelectorAll('.only3d').forEach((el) => {
+    // Trong task video: vẫn cho phép xem các nút phụ nếu cần nhưng ưu tiên turntable
+    el.style.opacity = isVideoTask ? '0.85' : '1';
+  });
+
+  if (isVideoTask && !isVideoFile) {
+    // Chuyển sang hệ quy chiếu chuẩn 360 độ: tự động quay, góc chính diện
+    viewer.setAutoRotate(true);
+    const speed = +$('ttSpeedSelect').value;
+    viewer.setRotateSpeed(speed);
+    $('ttPlayBtn').textContent = '⏸ Dừng quay';
+    $('ttAngleSelect').value = 'front';
+    viewer.frame('front');
+  } else if (!isVideoTask && !isVideoFile) {
+    // Trở lại chế độ 3D thông thường
+    viewer.setAutoRotate($('autoRotate').checked);
+  }
+}
+
+// Điều khiển Turntable 360° (Task 2)
+$('ttPlayBtn').addEventListener('click', () => {
+  if (!viewer) return;
+  const isSpinning = viewer.spin.on;
+  viewer.setAutoRotate(!isSpinning);
+  $('ttPlayBtn').textContent = isSpinning ? '▶ Tiếp tục quay' : '⏸ Dừng quay';
+});
+
+$('ttRevBtn').addEventListener('click', () => {
+  if (!viewer) return;
+  viewer.setRotateDirection((viewer.spin.dir || 1) * -1);
+});
+
+$('ttSpeedSelect').addEventListener('change', () => {
+  if (!viewer) return;
+  viewer.setRotateSpeed(+$('ttSpeedSelect').value);
+});
+
+$('ttAngleSelect').addEventListener('change', () => {
+  if (!viewer) return;
+  const val = $('ttAngleSelect').value;
+  if (val === 'front') viewer.frame('front');
+  else if (val === 'elevated') {
+    viewer.frame('front');
+    viewer.camera.position.y += viewer.radius * 0.35;
+    viewer.camera.lookAt(viewer.controls.target);
+  } else if (val === 'iso') {
+    viewer.frame('front');
+    viewer.camera.position.x += viewer.radius * 0.7;
+    viewer.camera.position.y += viewer.radius * 0.5;
+    viewer.camera.lookAt(viewer.controls.target);
+  }
+});
+
+$('ttExportBtn').addEventListener('click', async () => {
+  if (!viewer) return;
+  const btn = $('ttExportBtn');
+  const status = $('ttRecordStatus');
+  btn.disabled = true;
+  status.classList.remove('hidden');
+  status.textContent = 'Đang quay 360° và ghi hình… 0%';
+
+  try {
+    const duration = 60 / (+$('ttSpeedSelect').value);
+    const { blob, ext } = await viewer.recordTurntable(duration, (p) => {
+      status.textContent = `Đang quay 360° và ghi hình… ${Math.round(p * 100)}%`;
+    });
+    status.textContent = '✓ Ghi hình hoàn tất! Đang tải file video…';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${state.current?.group?.id || 'model'}_360.${ext}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (err) {
+    console.error(err);
+    status.textContent = '✗ Lỗi: Trình duyệt không hỗ trợ xuất video trực tiếp.';
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => status.classList.add('hidden'), 5000);
+  }
+});
+
 function renderGallery() {
   const ds = state.dataset;
   const q = $('search').value.trim().toLowerCase();
@@ -109,9 +225,11 @@ function renderGallery() {
   const nModels = ds.ids.reduce((n, g) => n + g.models.length, 0);
   const nVideos = ds.ids.reduce((n, g) => n + g.videos.length, 0);
   const modeLabel = { folder1: 'thư mục cấp 1', folder2: 'thư mục cấp 2', name: 'tên file' }[ds.mode];
+  const taskLabel = state.currentTask === '3d'
+    ? 'Task 1: Mô hình 3D tương tác'
+    : 'Task 2: Video 360° (Hệ quy chiếu chuẩn)';
   $('stats').textContent = ds.ids.length
-    ? `${ds.rootName} · ${ds.ids.length} ID · ${nModels} file 3D` + (nVideos ? ` · ${nVideos} video` : '') +
-      ` · nhóm theo ${modeLabel}` +
+    ? `${ds.rootName} · ${ds.ids.length} đối tượng · ${taskLabel}` +
       (q ? ` · đang lọc: ${state.filtered.length}` : '')
     : '';
   $('empty').classList.toggle('hidden', ds.ids.length > 0);
@@ -126,6 +244,7 @@ function renderGallery() {
 function renderCard(g) {
   const card = document.createElement('div');
   card.className = 'card';
+  const isVideoTask = state.currentTask === 'video';
 
   const thumb = document.createElement('div');
   thumb.className = 'thumb';
@@ -135,31 +254,41 @@ function renderCard(g) {
     img.dataset.src = urlOf(g.cover);
     io.observe(img);
     thumb.appendChild(img);
-    thumb.addEventListener('click', () => openLightbox(g));
+    // Trong Task 3D: bấm thumb mở phóng to/kéo ảnh lightbox
+    // Trong Task Video: bấm thumb mở thẳng chế độ Video 360° chuẩn hóa
+    if (isVideoTask) {
+      thumb.addEventListener('click', () => itemsOf(g)[0] && openModel(g, itemsOf(g)[0]));
+    } else {
+      thumb.addEventListener('click', () => openLightbox(g));
+    }
   } else if (g.videos[0]) {
-    // Không có ảnh: lấy khung hình đầu của video làm ảnh bìa.
     const v = document.createElement('video');
     v.muted = true;
     v.preload = 'metadata';
     v.dataset.src = urlOf(g.videos[0]) + '#t=0.1';
     io.observe(v);
     thumb.appendChild(v);
+    thumb.addEventListener('click', () => openModel(g, g.videos[0]));
   } else {
     thumb.innerHTML = '<span class="noimg">Không có ảnh</span>';
+    if (itemsOf(g)[0]) thumb.addEventListener('click', () => openModel(g, itemsOf(g)[0]));
   }
-  if (!g.cover && itemsOf(g)[0]) thumb.addEventListener('click', () => openModel(g, itemsOf(g)[0]));
-  if (g.videos[0]) {
+
+  // Huy hiệu góc ảnh
+  if (isVideoTask) {
     const b = document.createElement('span');
-    b.className = 'badge360';
-    b.textContent = '▶ 360°';
+    b.className = 'badge-video';
+    b.textContent = '▶ 360° Video';
     thumb.appendChild(b);
-    attachPreview(thumb, g.videos[0]);
-  }
-  if (g.coverImages.length > 1) {
+  } else if (g.coverImages.length > 1) {
     const c = document.createElement('span');
     c.className = 'count';
     c.textContent = `${g.coverImages.length} ảnh`;
     thumb.appendChild(c);
+  }
+
+  if (g.videos[0]) {
+    attachPreview(thumb, g.videos[0]);
   }
 
   const body = document.createElement('div');
@@ -170,16 +299,29 @@ function renderCard(g) {
   title.title = g.id;
   const chips = document.createElement('div');
   chips.className = 'chips';
-  for (const m of itemsOf(g)) {
+
+  if (isVideoTask) {
     const chip = document.createElement('button');
-    chip.className = m.kind === 'video' ? 'chip video' : 'chip';
-    chip.title = m.path;
-    chip.innerHTML = m.kind === 'video' ? `<b>▶ ${m.ext}</b>` : `<b>${m.ext}</b>`;
-    chip.append(m.name);
-    chip.addEventListener('click', () => openModel(g, m));
+    chip.className = 'chip task-video-chip';
+    chip.innerHTML = '<b>🎬 360°</b> Xem Video chuẩn hóa';
+    const targetModel = itemsOf(g)[0];
+    if (targetModel) {
+      chip.addEventListener('click', () => openModel(g, targetModel));
+    }
     chips.appendChild(chip);
+  } else {
+    for (const m of itemsOf(g)) {
+      const chip = document.createElement('button');
+      chip.className = m.kind === 'video' ? 'chip video' : 'chip';
+      chip.title = m.path;
+      chip.innerHTML = m.kind === 'video' ? `<b>▶ ${m.ext}</b>` : `<b>${m.ext}</b>`;
+      chip.append(m.name);
+      chip.addEventListener('click', () => openModel(g, m));
+      chips.appendChild(chip);
+    }
   }
-  if (!itemsOf(g).length) chips.innerHTML = '<span class="muted" style="font-size:12px">Không có file 3D / video</span>';
+
+  if (!itemsOf(g).length) chips.innerHTML = '<span class="muted" style="font-size:12px">Chưa có dữ liệu</span>';
   body.append(title, chips);
   card.append(thumb, body);
   return card;
@@ -426,6 +568,7 @@ async function openModel(group, model) {
   $('inset').src = group.cover ? urlOf(group.cover) : '';
   renderFileTabs();
   renderTextureOptions(group);
+  updateViewerForTask();
 
   const isVideo = model.kind === 'video';
   document.querySelector('.viewer-body').classList.toggle('video-mode', isVideo);

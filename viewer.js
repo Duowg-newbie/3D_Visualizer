@@ -77,7 +77,7 @@ export class Viewer {
     this.controls.dampingFactor = 0.12;
     this.controls.screenSpacePanning = true;
     // Tự xoay 360° theo thời gian thực (không phụ thuộc FPS), dừng khi người dùng đang kéo.
-    this.spin = { on: false, rpm: 12, dragging: false };
+    this.spin = { on: false, rpm: 12, dir: 1, dragging: false };
     this.controls.addEventListener('start', () => { this.spin.dragging = true; });
     this.controls.addEventListener('end', () => { this.spin.dragging = false; });
     this.clock = new THREE.Clock();
@@ -118,7 +118,7 @@ export class Viewer {
     this.resize();
     this.renderer.setAnimationLoop(() => {
       const dt = Math.min(this.clock.getDelta(), 0.1);
-      if (this.spin.on && !this.spin.dragging && this.object) this.orbitBy((this.spin.rpm / 60) * Math.PI * 2 * dt);
+      if (this.spin.on && !this.spin.dragging && this.object) this.orbitBy((this.spin.dir || 1) * (this.spin.rpm / 60) * Math.PI * 2 * dt);
       this.controls.update();
       this.renderer.render(this.scene, this.camera);
     });

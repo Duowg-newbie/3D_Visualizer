@@ -18,6 +18,14 @@
 <body>
   <header class="topbar">
     <div class="brand">Face 3D Viewer</div>
+    <div class="task-tabs" role="tablist" aria-label="Chế độ hiển thị">
+      <button id="taskTab3D" class="task-tab active" role="tab" aria-selected="true" data-task="3d" title="Xem tương tác mô hình 3D (Mesh, Point Cloud, Splat)">
+        <span class="icon">🧊</span> Task 1: Mô hình 3D
+      </button>
+      <button id="taskTabVideo" class="task-tab" role="tab" aria-selected="false" data-task="video" title="Xem video 360° chuẩn hóa để đánh giá cùng một hệ quy chiếu">
+        <span class="icon">🎬</span> Task 2: Video 360°
+      </button>
+    </div>
     <div class="actions">
       <label class="btn primary">
         Mở thư mục
@@ -70,6 +78,40 @@
       </div>
 
       <aside class="panel">
+        <!-- Hệ quy chiếu Turntable 360 dành cho Task 2 -->
+        <section id="turntablePanel" class="only-turntable hidden">
+          <h3>Hệ quy chiếu Video 360°</h3>
+          <div class="row">
+            <button id="ttPlayBtn" class="btn sm primary" style="flex:1">⏸ Dừng quay</button>
+            <button id="ttRevBtn" class="btn sm" title="Đổi chiều xoay">⇄ Đổi chiều</button>
+          </div>
+          <div class="row">
+            <span class="label">Tốc độ</span>
+            <select id="ttSpeedSelect">
+              <option value="4">Chậm (15 s/vòng)</option>
+              <option value="6" selected>Chuẩn (10 s/vòng)</option>
+              <option value="12">Nhanh (5 s/vòng)</option>
+              <option value="20">Rất nhanh (3 s/vòng)</option>
+            </select>
+          </div>
+          <div class="row">
+            <span class="label">Góc quay</span>
+            <select id="ttAngleSelect">
+              <option value="front" selected>Chính diện (0°)</option>
+              <option value="elevated">Nghiêng nhẹ (+15°)</option>
+              <option value="iso">Góc 3D (Toàn cảnh)</option>
+            </select>
+          </div>
+          <div class="row" style="margin-top:4px">
+            <button id="ttExportBtn" class="btn sm primary" style="width:100%" title="Ghi lại 1 vòng quay 360 độ để tải video về máy">
+              🎥 Ghi hình & Xuất Video 360°
+            </button>
+          </div>
+          <div id="ttRecordStatus" class="muted hidden" style="font-size:12px;text-align:center;margin-top:2px">
+            Đang ghi hình… 0%
+          </div>
+        </section>
+
         <section class="only-video">
           <h3>Video 360°</h3>
           <div class="row">

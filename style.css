@@ -51,6 +51,56 @@ input[type=color] { width: 44px; height: 28px; border: 1px solid var(--border); 
 
 .view { flex: 1; min-height: 0; }
 
+/* ---------- 2 Task Navigation ---------- */
+.task-tabs {
+  display: flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px;
+  gap: 4px;
+}
+.task-tab {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.task-tab:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+.task-tab.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(79, 140, 255, 0.35);
+}
+.task-tab .icon { font-size: 14px; }
+
+.badge-video {
+  position: absolute; left: 6px; top: 6px; background: rgba(245, 165, 36, 0.85); color: #000;
+  font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; pointer-events: none;
+}
+.chip.task-video-chip {
+  background: rgba(245, 165, 36, 0.15);
+  border-color: #f5a524;
+  color: #ffc266;
+  font-weight: 600;
+}
+.chip.task-video-chip:hover {
+  background: #f5a524;
+  color: #000;
+}
+
 /* ---------- Thư viện ---------- */
 #galleryView { overflow: auto; padding: 16px; }
 .stats { color: var(--muted); margin-bottom: 12px; }
