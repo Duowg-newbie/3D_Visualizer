@@ -118,7 +118,10 @@ export class Viewer {
     this.resize();
     this.renderer.setAnimationLoop(() => {
       const dt = Math.min(this.clock.getDelta(), 0.1);
-      if (this.spin.on && !this.spin.dragging && this.object) this.orbitBy((this.spin.dir || 1) * (this.spin.rpm / 60) * Math.PI * 2 * dt);
+      if (this.spin.on && !this.spin.dragging && this.object) {
+        this.orbitBy((this.spin.dir || 1) * (this.spin.rpm / 60) * Math.PI * 2 * dt);
+        if (this.onAngleChange) this.onAngleChange(this.getCurrentYawDeg());
+      }
       this.controls.update();
       this.renderer.render(this.scene, this.camera);
     });

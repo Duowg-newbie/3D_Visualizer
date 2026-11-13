@@ -130,75 +130,108 @@ state.currentTask = store.get('currentTask', '3d');
 $('taskTab3D').classList.toggle('active', state.currentTask === '3d');
 $('taskTabVideo').classList.toggle('active', state.currentTask === 'video');
 
+function formatAngleBadge(deg) {
+  let note = '';
+  if (deg >= 350 || deg <= 10) note = ' · Chính diện (Front)';
+  else if (deg >= 35 && deg <= 55) note = ' · Bán diện trái (45°)';
+  else if (deg >= 80 && deg <= 100) note = ' · Góc nghiêng trái (90°)';
+  else if (deg >= 170 && deg <= 190) note = ' · Sau gáy (180°)';
+  else if (deg >= 260 && deg <= 280) note = ' · Góc nghiêng phải (270°)';
+  else if (deg >= 305 && deg <= 325) note = ' · Bán diện phải (315°)';
+  return `${deg}°${note}`;
+}
+
 function updateViewerForTask() {
   if (!viewer || !state.current) return;
   const isVideoTask = state.currentTask === 'video';
   const isVideoFile = state.current.model.kind === 'video';
+  const viewerBody = document.querySelector('.viewer-body');
 
-  $('turntablePanel').classList.toggle('hidden', !isVideoTask || isVideoFile);
-  document.querySelectorAll('.only3d').forEach((el) => {
-    // Trong task video: vẫn cho phép xem các nút phụ nếu cần nhưng ưu tiên turntable
-    el.style.opacity = isVideoTask ? '0.85' : '1';
-  });
+  viewerBody.classList.toggle('task2-mode', isVideoTask);
+  $('task2ComparePane').classList.toggle('hidden', !isVideoTask);
+  $('task2ModelTag').classList.toggle('hidden', !isVideoTask);
+  $('timelineBar').classList.toggle('hidden', !isVideoTask || isVideoFile);
 
-  if (isVideoTask && !isVideoFile) {
-    // Chuyển sang hệ quy chiếu chuẩn 360 độ: tự động quay, góc chính diện
-    viewer.setAutoRotate(true);
-    const speed = +$('ttSpeedSelect').value;
-    viewer.setRotateSpeed(speed);
-    $('ttPlayBtn').textContent = '⏸ Dừng quay';
-    $('ttAngleSelect').value = 'front';
-    viewer.frame('front');
-  } else if (!isVideoTask && !isVideoFile) {
-    // Trở lại chế độ 3D thông thường
-    viewer.setAutoRotate($('autoRotate').checked);
+  if (isVideoTask) {
+    // Nạp ảnh gốc đối chiếu vào cột bên trái
+    const coverEntry = state.current.group.cover;
+    $('task2CompareImg').src = coverEntry ? urlOf(coverEntry) : '';
+
+    if (!isVideoFile) {
+      // Hệ quy chiếu chuẩn hóa 360°: camera chính diện, tắt lưới sàn, tự động quay
+      viewer.setGrid(false);
+      viewer.setAxes(false);
+      viewer.setRotateDirection(1);
+      const speed = +$('tlSpeedSelect').value;
+      viewer.setRotateSpeed(speed);
+      viewer.setAutoRotate(true);
+      $('tlPlayBtn').textContent = '⏸';
+      viewer.frame('front');
+      const curYaw = viewer.getCurrentYawDeg();
+      $('tlScrubSlider').value = curYaw;
+      $('tlAngleLabel').textContent = formatAngleBadge(curYaw);
+    }
+  } else {
+    // Trở về Task 1: Khảo sát 3D tự do
+    if (!isVideoFile) {
+      syncControls();
+    }
   }
 }
 
-// Điều khiển Turntable 360° (Task 2)
-$('ttPlayBtn').addEventListener('click', () => {
+// Điều khiển Timeline 360° (Scrub Bar) cho Task 2
+function toggleTurntablePlay() {
   if (!viewer) return;
   const isSpinning = viewer.spin.on;
   viewer.setAutoRotate(!isSpinning);
-  $('ttPlayBtn').textContent = isSpinning ? '▶ Tiếp tục quay' : '⏸ Dừng quay';
+  $('tlPlayBtn').textContent = isSpinning ? '▶' : '⏸';
+}
+
+$('tlPlayBtn').addEventListener('click', toggleTurntablePlay);
+
+// Kéo thanh trượt tua góc quay
+$('tlScrubSlider').addEventListener('input', (e) => {
+  if (!viewer) return;
+  viewer.setAutoRotate(false);
+  $('tlPlayBtn').textContent = '▶';
+  const deg = +e.target.value;
+  viewer.setYawDeg(deg);
+  $('tlAngleLabel').textContent = formatAngleBadge(deg);
 });
 
-$('ttRevBtn').addEventListener('click', () => {
+// Các nút góc chuẩn (Presets)
+document.querySelectorAll('.tl-preset').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    if (!viewer) return;
+    viewer.setAutoRotate(false);
+    $('tlPlayBtn').textContent = '▶';
+    const angle = +btn.dataset.angle;
+    viewer.setYawDeg(angle);
+    $('tlScrubSlider').value = angle;
+    $('tlAngleLabel').textContent = formatAngleBadge(angle);
+  });
+});
+
+$('tlRevBtn').addEventListener('click', () => {
   if (!viewer) return;
   viewer.setRotateDirection((viewer.spin.dir || 1) * -1);
 });
 
-$('ttSpeedSelect').addEventListener('change', () => {
+$('tlSpeedSelect').addEventListener('change', () => {
   if (!viewer) return;
-  viewer.setRotateSpeed(+$('ttSpeedSelect').value);
+  viewer.setRotateSpeed(+$('tlSpeedSelect').value);
 });
 
-$('ttAngleSelect').addEventListener('change', () => {
+$('tlExportBtn').addEventListener('click', async () => {
   if (!viewer) return;
-  const val = $('ttAngleSelect').value;
-  if (val === 'front') viewer.frame('front');
-  else if (val === 'elevated') {
-    viewer.frame('front');
-    viewer.camera.position.y += viewer.radius * 0.35;
-    viewer.camera.lookAt(viewer.controls.target);
-  } else if (val === 'iso') {
-    viewer.frame('front');
-    viewer.camera.position.x += viewer.radius * 0.7;
-    viewer.camera.position.y += viewer.radius * 0.5;
-    viewer.camera.lookAt(viewer.controls.target);
-  }
-});
-
-$('ttExportBtn').addEventListener('click', async () => {
-  if (!viewer) return;
-  const btn = $('ttExportBtn');
-  const status = $('ttRecordStatus');
+  const btn = $('tlExportBtn');
+  const status = $('tlRecordStatus');
   btn.disabled = true;
   status.classList.remove('hidden');
   status.textContent = 'Đang quay 360° và ghi hình… 0%';
 
   try {
-    const duration = 60 / (+$('ttSpeedSelect').value);
+    const duration = 60 / (+$('tlSpeedSelect').value);
     const { blob, ext } = await viewer.recordTurntable(duration, (p) => {
       status.textContent = `Đang quay 360° và ghi hình… ${Math.round(p * 100)}%`;
     });
@@ -206,12 +239,12 @@ $('ttExportBtn').addEventListener('click', async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${state.current?.group?.id || 'model'}_360.${ext}`;
+    a.download = `${state.current?.group?.id || 'turntable'}_360.${ext}`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   } catch (err) {
     console.error(err);
-    status.textContent = '✗ Lỗi: Trình duyệt không hỗ trợ xuất video trực tiếp.';
+    status.textContent = '✗ Lỗi: Trình duyệt không hỗ trợ MediaRecorder';
   } finally {
     btn.disabled = false;
     setTimeout(() => status.classList.add('hidden'), 5000);
@@ -494,6 +527,12 @@ function showGallery() {
 function ensureViewer() {
   if (viewer) return viewer;
   viewer = new Viewer($('canvasWrap'));
+  viewer.onAngleChange = (deg) => {
+    if (state.currentTask === 'video') {
+      $('tlScrubSlider').value = deg;
+      $('tlAngleLabel').textContent = formatAngleBadge(deg);
+    }
+  };
   // Khôi phục cài đặt đã lưu.
   const s = store.get('settings', {});
   for (const [id, key] of [['shading', 'shading'], ['wireframe', 'wireframe'], ['doubleSide', 'doubleSide'], ['pointSize', 'pointSize'], ['light', 'light']]) {
@@ -797,7 +836,6 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'PageDown') return stepId(1);
   if (e.key === 'PageUp') return stepId(-1);
   if (state.current.model.kind === 'video') {
-    // Video đang được focus tự xử lý Space/mũi tên.
     if (e.target === video || e.target.matches('select, input')) return;
     if (e.key === ' ') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
     else if (e.key === 'ArrowLeft') stepFrame(-1);
@@ -805,6 +843,24 @@ window.addEventListener('keydown', (e) => {
     else if (e.key === '[') stepRate(-1);
     else if (e.key === ']') stepRate(1);
     return;
+  }
+  if (state.currentTask === 'video') {
+    if (e.target.matches('select, input')) return;
+    if (e.key === ' ') {
+      e.preventDefault();
+      toggleTurntablePlay();
+      return;
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      viewer.setAutoRotate(false);
+      $('tlPlayBtn').textContent = '▶';
+      const step = e.key === 'ArrowLeft' ? -5 : 5;
+      let newDeg = (viewer.getCurrentYawDeg() + step + 360) % 360;
+      viewer.setYawDeg(newDeg);
+      $('tlScrubSlider').value = newDeg;
+      $('tlAngleLabel').textContent = formatAngleBadge(newDeg);
+      return;
+    }
   }
   if (e.key === 'r' || e.key === 'R') {
     $('autoRotate').checked = !$('autoRotate').checked;
