@@ -27,20 +27,6 @@
       </button>
     </div>
     <div class="actions">
-      <label class="btn primary">
-        Mở thư mục
-        <input id="folderInput" type="file" webkitdirectory directory multiple hidden />
-      </label>
-      <label class="btn">
-        Mở file
-        <input id="fileInput" type="file" multiple hidden />
-      </label>
-      <select id="groupMode" title="Cách xác định ID">
-        <option value="auto">Nhóm ID: tự động</option>
-        <option value="folder1">ID = thư mục cấp 1</option>
-        <option value="folder2">ID = thư mục cấp 2</option>
-        <option value="name">ID = tên file</option>
-      </select>
       <input id="search" type="search" placeholder="Tìm ID…" />
       <input id="cardSize" type="range" min="120" max="320" value="190" title="Kích thước ảnh" />
     </div>
@@ -50,10 +36,8 @@
   <main id="galleryView" class="view">
     <div id="stats" class="stats"></div>
     <div id="empty" class="empty">
-      <h2>Kéo thả một thư mục vào đây hoặc bấm “Mở thư mục”</h2>
-      <p>Mỗi thư mục con được coi là một ID khuôn mặt. Chỉ ảnh trong thư mục <code>image</code> có ID trùng với model mới được dùng làm ảnh đại diện;
-        nếu không tìm thấy ảnh khớp, thư viện sẽ hiển thị “Không có ảnh”.</p>
-      <p class="muted">Hỗ trợ: OBJ (+MTL, texture), PLY (mesh / point cloud / Gaussian splat), GLB/GLTF, FBX, STL, PCD, XYZ, SPLAT, KSPLAT, SPZ · Video: MP4, WEBM, MOV, M4V, MKV, OGV</p>
+      <h2>Đang tải danh sách mô hình khuôn mặt…</h2>
+      <p class="muted">Nếu không thấy dữ liệu, vui lòng kiểm tra file <code>data/manifest.json</code>.</p>
     </div>
     <div id="grid" class="grid"></div>
   </main>

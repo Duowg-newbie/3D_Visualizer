@@ -80,6 +80,11 @@ export class Viewer {
     this.spin = { on: false, rpm: 12, dir: 1, dragging: false };
     this.controls.addEventListener('start', () => { this.spin.dragging = true; });
     this.controls.addEventListener('end', () => { this.spin.dragging = false; });
+    this.controls.addEventListener('change', () => {
+      if (this.spin.dragging && this.onAngleChange) {
+        this.onAngleChange(this.getCurrentYawDeg());
+      }
+    });
     this.clock = new THREE.Clock();
 
     // Đèn bán cầu + đèn gắn theo camera để mặt luôn được chiếu sáng.
@@ -443,11 +448,97 @@ export class Viewer {
   /** Tốc độ tự xoay, đơn vị vòng/phút. */
   setRotateSpeed(rpm) { this.spin.rpm = rpm; }
 
+  /** Chiều tự xoay: 1 = cùng chiều kim đồng hồ (từ trái qua phải), -1 = ngược lại */
+  setRotateDirection(dir) { this.spin.dir = dir; }
+
+  /** Lấy góc quay hiện tại quanh trục thẳng đứng (0° đến 359°), trong đó 0° là chính diện. */
+  getCurrentYawDeg() {
+    const t = this.controls?.target || { x: 0, y: 0, z: 0 };
+    const dx = this.camera.position.x - t.x;
+    const dz = this.camera.position.z - t.z;
+    let deg = Math.round(THREE.MathUtils.radToDeg(Math.atan2(dx, dz))) % 360;
+    if (deg < 0) deg += 360;
+    return deg;
+  }
+
+  /** Đặt góc quay camera quanh trục thẳng đứng theo độ (0° đến 360°). */
+  setYawDeg(deg) {
+    const t = this.controls?.target || new THREE.Vector3();
+    const rad = THREE.MathUtils.degToRad(deg);
+    const dx = this.camera.position.x - t.x;
+    const dz = this.camera.position.z - t.z;
+    const horizDist = Math.max(Math.hypot(dx, dz), this.radius || 1);
+    this.camera.position.x = t.x + horizDist * Math.sin(rad);
+    this.camera.position.z = t.z + horizDist * Math.cos(rad);
+    this.camera.lookAt(t);
+    this.controls.update();
+  }
+
   /** Quay camera quanh trục dọc qua tâm => vật thể như đang xoay trên bàn xoay. */
   orbitBy(angle) {
     const t = this.controls.target;
     this.camera.position.sub(t).applyAxisAngle(Y_AXIS, angle).add(t);
     this.camera.lookAt(t);
+  }
+
+  /**
+   * Quay tự động 1 vòng 360° và ghi hình qua MediaRecorder.
+   * @returns {Promise<{blob: Blob, ext: string}>}
+   */
+  async recordTurntable(durationSec = 5, onProgress = () => {}) {
+    return new Promise((resolve, reject) => {
+      const canvas = this.renderer.domElement;
+      if (!canvas.captureStream) {
+        return reject(new Error('Trình duyệt không hỗ trợ captureStream'));
+      }
+      const stream = canvas.captureStream(30);
+      let mimeType = 'video/webm;codecs=vp9';
+      let ext = 'webm';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'video/webm';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'video/mp4';
+          ext = 'mp4';
+          if (!MediaRecorder.isTypeSupported(mimeType)) {
+            mimeType = '';
+          }
+        }
+      }
+      let recorder;
+      try {
+        recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      } catch (e) {
+        return reject(e);
+      }
+      const chunks = [];
+      recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mimeType || 'video/webm' });
+        resolve({ blob, ext });
+      };
+      recorder.onerror = (e) => reject(e);
+
+      const prevSpin = { ...this.spin };
+      this.spin.on = true;
+      this.spin.rpm = 60 / durationSec;
+      this.spin.dir = 1;
+      this.frame('front');
+
+      const startTime = performance.now();
+      const totalMs = durationSec * 1000;
+      recorder.start();
+
+      const interval = setInterval(() => {
+        const elapsed = performance.now() - startTime;
+        const p = Math.min(elapsed / totalMs, 1);
+        onProgress(p);
+        if (p >= 1) {
+          clearInterval(interval);
+          if (recorder.state !== 'inactive') recorder.stop();
+          Object.assign(this.spin, prevSpin);
+        }
+      }, 100);
+    });
   }
   setFov(v) {
     this.camera.fov = v;

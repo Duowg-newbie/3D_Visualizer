@@ -54,23 +54,25 @@ function loadEntries(entries) {
 const itemsOf = (g) => [...g.models, ...g.videos];
 
 function rebuild() {
-  state.dataset = buildDataset(state.entries, $('groupMode').value);
+  state.dataset = buildDataset(state.entries, $('groupMode')?.value || 'auto');
   renderGallery();
 }
 
-$('folderInput').addEventListener('change', (e) => {
+$('folderInput')?.addEventListener('change', (e) => {
   if (e.target.files.length) loadEntries(entriesFromFileList(e.target.files));
   e.target.value = '';
 });
-$('fileInput').addEventListener('change', (e) => {
+$('fileInput')?.addEventListener('change', (e) => {
   if (e.target.files.length) loadEntries(entriesFromFileList(e.target.files));
   e.target.value = '';
 });
-$('groupMode').addEventListener('change', () => {
-  store.set('groupMode', $('groupMode').value);
-  if (state.entries.length) rebuild();
-});
-$('groupMode').value = store.get('groupMode', 'auto');
+if ($('groupMode')) {
+  $('groupMode').addEventListener('change', () => {
+    store.set('groupMode', $('groupMode').value);
+    if (state.entries.length) rebuild();
+  });
+  $('groupMode').value = store.get('groupMode', 'auto');
+}
 
 
 
@@ -161,13 +163,15 @@ function updateViewerForTask() {
       // Hệ quy chiếu chuẩn hóa 360°: camera chính diện, tắt lưới sàn, tự động quay
       viewer.setGrid(false);
       viewer.setAxes(false);
-      viewer.setRotateDirection(1);
-      const speed = +$('tlSpeedSelect').value;
+      if (viewer.setRotateDirection) viewer.setRotateDirection(1);
+      const speed = $('tlSpeedSelect') ? +$('tlSpeedSelect').value : 6;
       viewer.setRotateSpeed(speed);
       viewer.setAutoRotate(true);
       $('tlPlayBtn').textContent = '⏸';
-      viewer.frame('front');
-      const curYaw = viewer.getCurrentYawDeg();
+      if (viewer.object) {
+        viewer.frame('front');
+      }
+      const curYaw = viewer.getCurrentYawDeg ? viewer.getCurrentYawDeg() : 0;
       $('tlScrubSlider').value = curYaw;
       $('tlAngleLabel').textContent = formatAngleBadge(curYaw);
     }
@@ -177,6 +181,7 @@ function updateViewerForTask() {
       syncControls();
     }
   }
+  viewer.resize();
 }
 
 // Điều khiển Timeline 360° (Scrub Bar) cho Task 2
@@ -307,13 +312,8 @@ function renderCard(g) {
     if (itemsOf(g)[0]) thumb.addEventListener('click', () => openModel(g, itemsOf(g)[0]));
   }
 
-  // Huy hiệu góc ảnh
-  if (isVideoTask) {
-    const b = document.createElement('span');
-    b.className = 'badge-video';
-    b.textContent = '▶ 360° Video';
-    thumb.appendChild(b);
-  } else if (g.coverImages.length > 1) {
+  // Huy hiệu góc ảnh (chỉ hiển thị ở Task 1 nếu có nhiều ảnh đại diện)
+  if (!isVideoTask && g.coverImages.length > 1) {
     const c = document.createElement('span');
     c.className = 'count';
     c.textContent = `${g.coverImages.length} ảnh`;
@@ -333,25 +333,14 @@ function renderCard(g) {
   const chips = document.createElement('div');
   chips.className = 'chips';
 
-  if (isVideoTask) {
+  for (const m of itemsOf(g)) {
     const chip = document.createElement('button');
-    chip.className = 'chip task-video-chip';
-    chip.innerHTML = '<b>🎬 360°</b> Xem Video chuẩn hóa';
-    const targetModel = itemsOf(g)[0];
-    if (targetModel) {
-      chip.addEventListener('click', () => openModel(g, targetModel));
-    }
+    chip.className = m.kind === 'video' ? 'chip video' : 'chip';
+    chip.title = m.path;
+    chip.innerHTML = m.kind === 'video' ? `<b>▶ ${m.ext}</b>` : `<b>${m.ext}</b>`;
+    chip.append(m.name);
+    chip.addEventListener('click', () => openModel(g, m));
     chips.appendChild(chip);
-  } else {
-    for (const m of itemsOf(g)) {
-      const chip = document.createElement('button');
-      chip.className = m.kind === 'video' ? 'chip video' : 'chip';
-      chip.title = m.path;
-      chip.innerHTML = m.kind === 'video' ? `<b>▶ ${m.ext}</b>` : `<b>${m.ext}</b>`;
-      chip.append(m.name);
-      chip.addEventListener('click', () => openModel(g, m));
-      chips.appendChild(chip);
-    }
   }
 
   if (!itemsOf(g).length) chips.innerHTML = '<span class="muted" style="font-size:12px">Chưa có dữ liệu</span>';
@@ -630,6 +619,7 @@ async function openModel(group, model) {
     const info = await viewer.load(model, group.files);
     if (!info || state.current?.model !== model) return;
     renderInfo(info);
+    updateViewerForTask();
   } catch (err) {
     if (state.current?.model !== model) return;
     console.error(err);
