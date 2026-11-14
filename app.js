@@ -23,6 +23,19 @@ const state = {
   currentTask: '3d', // '3d' hoặc 'video'
 };
 let viewer = null;
+let viewerB = null;
+
+function ensureViewerB() {
+  if (viewerB) return viewerB;
+  viewerB = new Viewer($('canvasWrapB'));
+  viewerB.onAngleChange = (deg) => {
+    if (state.currentTask === 'video') {
+      $('tlScrubSlider').value = deg;
+      $('tlAngleLabel').textContent = formatAngleBadge(deg);
+    }
+  };
+  return viewerB;
+}
 const imageUrls = new Map();
 
 /** Trả về URL để hiển thị/tải một entry (hỗ trợ cả file local lẫn server). */
@@ -148,16 +161,25 @@ function updateViewerForTask() {
   const isVideoTask = state.currentTask === 'video';
   const isVideoFile = state.current.model.kind === 'video';
   const viewerBody = document.querySelector('.viewer-body');
+  const group = state.current.group;
 
   viewerBody.classList.toggle('task2-mode', isVideoTask);
   $('task2ComparePane').classList.toggle('hidden', !isVideoTask);
   $('task2ModelTag').classList.toggle('hidden', !isVideoTask);
   $('timelineBar').classList.toggle('hidden', !isVideoTask || isVideoFile);
+  $('task2CompareSelects').classList.toggle('hidden', !isVideoTask);
 
   if (isVideoTask) {
     // Nạp ảnh gốc đối chiếu vào cột bên trái
-    const coverEntry = state.current.group.cover;
+    const coverEntry = group.cover;
     $('task2CompareImg').src = coverEntry ? urlOf(coverEntry) : '';
+
+    // Cập nhật tên nhãn Model A
+    const mNameA = state.current.model.modelName || 'Model A';
+    $('modelTagAName').textContent = mNameA;
+
+    // Thiết lập danh sách chọn Model A và Model B
+    setupTask2Selects(group);
 
     if (!isVideoFile) {
       // Hệ quy chiếu chuẩn hóa 360°: camera chính diện, tắt lưới sàn, tự động quay
@@ -177,18 +199,120 @@ function updateViewerForTask() {
     }
   } else {
     // Trở về Task 1: Khảo sát 3D tự do
+    $('canvasWrapB').classList.add('hidden');
+    viewerB?.clear();
     if (!isVideoFile) {
       syncControls();
     }
   }
   viewer.resize();
+  viewerB?.resize();
 }
 
-// Điều khiển Timeline 360° (Scrub Bar) cho Task 2
+let isSyncingSelects = false;
+function setupTask2Selects(group) {
+  if (isSyncingSelects) return;
+  isSyncingSelects = true;
+
+  const selA = $('task2SelectA');
+  const selB = $('task2SelectB');
+  const currentModelA = state.current.model;
+  
+  selA.replaceChildren();
+  for (const m of group.models) {
+    const opt = new Option(m.modelName || m.name, m.path);
+    if (m === currentModelA) opt.selected = true;
+    selA.appendChild(opt);
+  }
+
+  // Model B: có tuỳ chọn (Không so sánh)
+  selB.replaceChildren(new Option('-- Không so sánh --', ''));
+  for (const m of group.models) {
+    if (m !== currentModelA) {
+      selB.appendChild(new Option(m.modelName || m.name, m.path));
+    }
+  }
+
+  // Nếu có từ 2 model trở lên và Model B chưa chọn, tự chọn model thứ 2
+  if (group.models.length >= 2 && !state.currentModelBPath) {
+    const secondModel = group.models.find(m => m !== currentModelA);
+    if (secondModel) {
+      state.currentModelBPath = secondModel.path;
+      selB.value = secondModel.path;
+    }
+  }
+
+  if (state.currentModelBPath && group.models.some(m => m.path === state.currentModelBPath)) {
+    selB.value = state.currentModelBPath;
+  } else {
+    selB.value = '';
+    state.currentModelBPath = '';
+  }
+
+  loadModelB(group, selB.value);
+  isSyncingSelects = false;
+}
+
+$('task2SelectA').addEventListener('change', () => {
+  const path = $('task2SelectA').value;
+  const m = state.current.group.models.find(x => x.path === path);
+  if (m) openModel(state.current.group, m);
+});
+
+$('task2SelectB').addEventListener('change', () => {
+  state.currentModelBPath = $('task2SelectB').value;
+  loadModelB(state.current.group, state.currentModelBPath);
+});
+
+async function loadModelB(group, modelPath) {
+  const wrapB = $('canvasWrapB');
+  if (!modelPath) {
+    wrapB.classList.add('hidden');
+    viewerB?.clear();
+    viewer.resize();
+    return;
+  }
+
+  const modelB = group.models.find(m => m.path === modelPath);
+  if (!modelB) {
+    wrapB.classList.add('hidden');
+    viewerB?.clear();
+    viewer.resize();
+    return;
+  }
+
+  wrapB.classList.remove('hidden');
+  $('modelTagBName').textContent = modelB.modelName || 'Model B';
+  const vb = ensureViewerB();
+  vb.resize();
+  viewer.resize();
+
+  $('loadingB').classList.remove('hidden');
+  $('errorB').classList.add('hidden');
+  try {
+    await vb.load(modelB, group.files);
+    vb.setGrid(false);
+    vb.setAxes(false);
+    vb.setRotateDirection(viewer.spin.dir || 1);
+    vb.setRotateSpeed(viewer.spin.rpm || 6);
+    vb.setAutoRotate(viewer.spin.on);
+    vb.frame('front');
+    vb.setYawDeg(viewer.getCurrentYawDeg());
+  } catch (err) {
+    console.error(err);
+    $('errorB').textContent = `Lỗi nạp Model B: ${err.message || err}`;
+    $('errorB').classList.remove('hidden');
+  } finally {
+    $('loadingB').classList.add('hidden');
+  }
+}
+
+// Điều khiển Timeline 360° (Scrub Bar) cho Task 2 (Đồng bộ cả Model A & Model B)
 function toggleTurntablePlay() {
   if (!viewer) return;
   const isSpinning = viewer.spin.on;
   viewer.setAutoRotate(!isSpinning);
+  viewerB?.setAutoRotate(!isSpinning);
   $('tlPlayBtn').textContent = isSpinning ? '▶' : '⏸';
 }
 
@@ -198,9 +322,11 @@ $('tlPlayBtn').addEventListener('click', toggleTurntablePlay);
 $('tlScrubSlider').addEventListener('input', (e) => {
   if (!viewer) return;
   viewer.setAutoRotate(false);
+  viewerB?.setAutoRotate(false);
   $('tlPlayBtn').textContent = '▶';
   const deg = +e.target.value;
   viewer.setYawDeg(deg);
+  viewerB?.setYawDeg(deg);
   $('tlAngleLabel').textContent = formatAngleBadge(deg);
 });
 
@@ -209,9 +335,11 @@ document.querySelectorAll('.tl-preset').forEach((btn) => {
   btn.addEventListener('click', () => {
     if (!viewer) return;
     viewer.setAutoRotate(false);
+    viewerB?.setAutoRotate(false);
     $('tlPlayBtn').textContent = '▶';
     const angle = +btn.dataset.angle;
     viewer.setYawDeg(angle);
+    viewerB?.setYawDeg(angle);
     $('tlScrubSlider').value = angle;
     $('tlAngleLabel').textContent = formatAngleBadge(angle);
   });
@@ -219,12 +347,16 @@ document.querySelectorAll('.tl-preset').forEach((btn) => {
 
 $('tlRevBtn').addEventListener('click', () => {
   if (!viewer) return;
-  viewer.setRotateDirection((viewer.spin.dir || 1) * -1);
+  const newDir = (viewer.spin.dir || 1) * -1;
+  viewer.setRotateDirection(newDir);
+  viewerB?.setRotateDirection(newDir);
 });
 
 $('tlSpeedSelect').addEventListener('change', () => {
   if (!viewer) return;
-  viewer.setRotateSpeed(+$('tlSpeedSelect').value);
+  const sp = +$('tlSpeedSelect').value;
+  viewer.setRotateSpeed(sp);
+  viewerB?.setRotateSpeed(sp);
 });
 
 $('tlExportBtn').addEventListener('click', async () => {
@@ -256,19 +388,37 @@ $('tlExportBtn').addEventListener('click', async () => {
   }
 });
 
+function updateModelFilterOptions() {
+  const sel = $('modelFilterSelect');
+  if (!sel || !state.dataset) return;
+  const cur = sel.value;
+  const models = state.dataset.models || [];
+  sel.replaceChildren(new Option('Tất cả Model', ''));
+  for (const m of models) {
+    sel.appendChild(new Option(`Model: ${m}`, m));
+  }
+  if (models.includes(cur)) sel.value = cur;
+}
+
 function renderGallery() {
   const ds = state.dataset;
+  updateModelFilterOptions();
   const q = $('search').value.trim().toLowerCase();
-  state.filtered = ds.ids.filter((g) => !q || g.id.toLowerCase().includes(q));
+  const filterModel = $('modelFilterSelect')?.value || '';
+  state.filtered = ds.ids.filter((g) => {
+    if (q && !g.id.toLowerCase().includes(q)) return false;
+    if (filterModel && !g.models.some((m) => m.modelName === filterModel)) return false;
+    return true;
+  });
   const nModels = ds.ids.reduce((n, g) => n + g.models.length, 0);
   const nVideos = ds.ids.reduce((n, g) => n + g.videos.length, 0);
-  const modeLabel = { folder1: 'thư mục cấp 1', folder2: 'thư mục cấp 2', name: 'tên file' }[ds.mode];
   const taskLabel = state.currentTask === '3d'
     ? 'Task 1: Mô hình 3D tương tác'
     : 'Task 2: Video 360° (Hệ quy chiếu chuẩn)';
+  const modelInfo = ds.models?.length ? ` · ${ds.models.length} model: [${ds.models.join(', ')}]` : '';
   $('stats').textContent = ds.ids.length
-    ? `${ds.rootName} · ${ds.ids.length} đối tượng · ${taskLabel}` +
-      (q ? ` · đang lọc: ${state.filtered.length}` : '')
+    ? `${ds.rootName} · ${ds.ids.length} đối tượng${modelInfo} · ${taskLabel}` +
+      (q || filterModel ? ` · đang lọc: ${state.filtered.length}` : '')
     : '';
   $('empty').classList.toggle('hidden', ds.ids.length > 0);
 
@@ -278,6 +428,10 @@ function renderGallery() {
   for (const g of state.filtered) frag.appendChild(renderCard(g));
   grid.appendChild(frag);
 }
+
+$('modelFilterSelect')?.addEventListener('change', () => {
+  renderGallery();
+});
 
 function renderCard(g) {
   const card = document.createElement('div');
@@ -337,9 +491,13 @@ function renderCard(g) {
     const chip = document.createElement('button');
     chip.className = m.kind === 'video' ? 'chip video' : 'chip';
     chip.title = m.path;
-    chip.innerHTML = m.kind === 'video' ? `<b>▶ ${m.ext}</b>` : `<b>${m.ext}</b>`;
-    chip.append(m.name);
-    chip.addEventListener('click', () => openModel(g, m));
+    const tag = m.modelName || m.ext;
+    chip.innerHTML = m.kind === 'video' ? `<b>▶ ${m.ext}</b>` : `<b>${tag}</b>`;
+    chip.append(` ${m.name}`);
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openModel(g, m);
+    });
     chips.appendChild(chip);
   }
 
@@ -510,6 +668,8 @@ function showGallery() {
   $('galleryView').classList.remove('hidden');
   stopVideo();
   viewer?.clear();
+  viewerB?.clear();
+  $('canvasWrapB').classList.add('hidden');
   state.current = null;
 }
 
@@ -520,6 +680,9 @@ function ensureViewer() {
     if (state.currentTask === 'video') {
       $('tlScrubSlider').value = deg;
       $('tlAngleLabel').textContent = formatAngleBadge(deg);
+      if (viewerB && viewerB.object) {
+        viewerB.setYawDeg(deg);
+      }
     }
   };
   // Khôi phục cài đặt đã lưu.
@@ -637,7 +800,8 @@ function renderFileTabs() {
   for (const m of itemsOf(group)) {
     const b = document.createElement('button');
     b.className = 'btn sm' + (m === model ? ' active' : '');
-    b.textContent = m.kind === 'video' ? '▶ ' + m.name : m.name;
+    const label = m.modelName ? `${m.modelName} (${m.name})` : m.name;
+    b.textContent = m.kind === 'video' ? '▶ ' + label : label;
     b.title = m.path;
     b.addEventListener('click', () => openModel(group, m));
     tabs.appendChild(b);

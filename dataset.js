@@ -72,14 +72,15 @@ function makeEntry(file, path) {
 
 /** Chọn chế độ nhóm phù hợp nhất khi để "tự động". */
 function detectMode(entries) {
-  // Video 360° cũng xác định ID như file 3D.
   const models = entries.filter((e) => e.kind === 'model' || e.kind === 'video');
   if (!models.length) return 'folder1';
-  // Ảnh/model nằm ngay trong thư mục gốc => nhóm theo tên.
+  // Hỗ trợ cấu trúc đa mô hình: data/models/<model_name>/<ID>/...
+  if (models.some((e) => e.parts.length >= 5 && /^models?$/i.test(e.parts[1]))) {
+    return 'folder2';
+  }
   if (models.some((e) => e.parts.length < 3)) return 'name';
   const lvl1 = new Set(models.map((e) => e.parts[1]));
   if ([...lvl1].every((n) => TYPE_FOLDERS.test(n))) {
-    // root/meshes/001.obj + root/images/001.jpg, hoặc root/split/ID/...
     const deep = models.every((e) => e.parts.length >= 4);
     const lvl2 = new Set(models.map((e) => e.parts[2]));
     if (deep && ![...lvl2].every((n) => TYPE_FOLDERS.test(n))) return 'folder2';
@@ -158,20 +159,35 @@ export function buildDataset(entries, mode = 'auto') {
     }
   }
 
+  const allModelsSet = new Set();
+
   const ids = [...groups.values()]
     .map((g) => {
       g.models = g.files.filter((f) => f.kind === 'model').sort((a, b) => natural.compare(a.path, b.path));
       g.videos = g.files.filter((f) => f.kind === 'video').sort((a, b) => natural.compare(a.path, b.path));
       g.images = g.files.filter((f) => f.kind === 'image').sort((a, b) => natural.compare(a.path, b.path));
       g.coverImages = g.images.filter((im) => im.parts.some((part) => IMAGE_FOLDERS.test(part)));
-      // Chỉ dùng ảnh trong thư mục images làm ảnh đại diện.
       g.cover = pickCover(g.coverImages, rootName, g.id);
+
+      // Gắn modelName cho từng file 3D & lập bản đồ methods
+      g.modelsByMethod = {};
+      for (const m of g.models) {
+        let mName = m.modelName;
+        if (!mName && m.parts.length >= 5 && /^models?$/i.test(m.parts[1])) {
+          mName = m.parts[2];
+        }
+        if (!mName) mName = 'default';
+        m.modelName = mName;
+        g.modelsByMethod[mName] = m;
+        allModelsSet.add(mName);
+      }
       return g;
     })
     .filter((g) => g.models.length || g.videos.length || g.images.length)
     .sort((a, b) => natural.compare(a.id, b.id));
 
-  return { rootName, mode: resolved, ids };
+  const modelList = [...allModelsSet].sort();
+  return { rootName, mode: resolved, ids, models: modelList };
 }
 
 /** Điểm "giống ảnh chính diện" của một ảnh, càng cao càng tốt. */
@@ -206,6 +222,10 @@ function pickCover(images, rootName, id) {
 }
 
 function folderEntryId(entry, depth) {
+  // Cấu trúc đa mô hình: data/models/<model_name>/<ID>/<file>
+  if (entry.parts.length >= 5 && /^models?$/i.test(entry.parts[1])) {
+    return entry.parts[3];
+  }
   if (entry.parts.length >= 4 && TYPE_FOLDERS.test(entry.parts[1])) return entry.parts[2];
   return entry.parts.length > depth + 1 ? entry.parts.slice(1, depth + 1).join('/') : '(gốc)';
 }

@@ -27,6 +27,9 @@
       </button>
     </div>
     <div class="actions">
+      <select id="modelFilterSelect" title="Lọc theo Model AI">
+        <option value="">Tất cả Model</option>
+      </select>
       <input id="search" type="search" placeholder="Tìm ID…" />
       <input id="cardSize" type="range" min="120" max="320" value="190" title="Kích thước ảnh" />
     </div>
@@ -50,6 +53,12 @@
       <div id="viewerTitle" class="viewer-title"></div>
       <button id="nextId" class="btn icon" title="ID sau (PageDown)">›</button>
       <div id="fileTabs" class="file-tabs"></div>
+      <div id="task2CompareSelects" class="task2-compare-selects hidden">
+        <span class="compare-label">So sánh:</span>
+        <select id="task2SelectA" class="select-model" title="Chọn Model A"></select>
+        <span class="compare-vs">vs</span>
+        <select id="task2SelectB" class="select-model" title="Chọn Model B để đối chiếu song song"></select>
+      </div>
     </div>
     <div class="viewer-body">
       <!-- Cột so sánh ảnh gốc 2D (Chỉ hiển thị ở Task 2) -->
@@ -58,17 +67,26 @@
         <img id="task2CompareImg" class="task2-compare-img" alt="Ảnh gốc đối chiếu" />
       </div>
 
+      <!-- Cột Model A -->
       <div id="canvasWrap" class="canvas-wrap">
-        <div id="task2ModelTag" class="pane-tag hidden">🎬 Kết quả 3D (360° Video Reference)</div>
+        <div id="task2ModelTag" class="pane-tag hidden">🎬 Model A: <span id="modelTagAName">HQ-Head</span></div>
         <img id="inset" class="inset" alt="" />
         <div id="loading" class="loading hidden">Đang tải…</div>
         <div id="error" class="error hidden"></div>
         <video id="video" class="video-player hidden" controls loop muted playsinline></video>
         <div class="hint only3d">Chuột trái: xoay · Phải: di chuyển · Cuộn: zoom · F: canh giữa · 1–6: góc nhìn · R: tự xoay</div>
         <div class="hint only-video">Space: phát/dừng · ←/→: lùi/tới 1 khung · [ ]: chậm/nhanh</div>
+      </div>
 
-        <!-- Thanh điều khiển Timeline 360° (Scrub Bar) cho Task 2 -->
-        <div id="timelineBar" class="timeline-bar hidden">
+      <!-- Cột Model B (So sánh song song đối đầu) -->
+      <div id="canvasWrapB" class="canvas-wrap hidden">
+        <div class="pane-tag">🎬 Model B: <span id="modelTagBName">Đối chứng</span></div>
+        <div id="loadingB" class="loading hidden">Đang tải Model B…</div>
+        <div id="errorB" class="error hidden"></div>
+      </div>
+
+      <!-- Thanh điều khiển Timeline 360° (Scrub Bar) cho Task 2 -->
+      <div id="timelineBar" class="timeline-bar hidden">
           <div class="timeline-slider-row">
             <button id="tlPlayBtn" class="btn sm primary tl-play-btn" title="Phát / Dừng quay (Space)">⏸</button>
             <input id="tlScrubSlider" class="timeline-slider" type="range" min="0" max="360" step="1" value="0" title="Kéo để xoay đến góc bất kỳ" />

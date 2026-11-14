@@ -12,7 +12,8 @@ export async function fetchStaticManifest() {
   try {
     const res = await fetch('./data/manifest.json', { cache: 'no-cache' });
     if (!res.ok) return null;
-    const paths = await res.json();
+    const data = await res.json();
+    const paths = Array.isArray(data) ? data : data.files;
     if (!Array.isArray(paths) || !paths.length) return null;
     return paths.map((p) => makeServerEntry(p));
   } catch {
@@ -34,6 +35,7 @@ export function makeServerEntry(serverPath) {
     : 'other';
 
   const url = './' + serverPath;
+  const modelName = (parts.length >= 4 && parts[1] === 'models') ? parts[2] : null;
 
   return {
     file: null,
@@ -43,6 +45,7 @@ export function makeServerEntry(serverPath) {
     name,
     ext,
     kind,
+    modelName,
     isServer: true,
   };
 }
