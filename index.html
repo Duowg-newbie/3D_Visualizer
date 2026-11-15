@@ -60,6 +60,7 @@
         <select id="task2SelectB" class="select-model" title="Chọn Model B để đối chiếu song song"></select>
       </div>
     </div>
+
     <div class="viewer-body">
       <!-- Cột so sánh ảnh gốc 2D (Chỉ hiển thị ở Task 2) -->
       <div id="task2ComparePane" class="task2-compare-pane hidden">
@@ -70,12 +71,9 @@
       <!-- Cột Model A -->
       <div id="canvasWrap" class="canvas-wrap">
         <div id="task2ModelTag" class="pane-tag hidden">🎬 Model A: <span id="modelTagAName">HQ-Head</span></div>
-        <img id="inset" class="inset" alt="" />
         <div id="loading" class="loading hidden">Đang tải…</div>
         <div id="error" class="error hidden"></div>
-        <video id="video" class="video-player hidden" controls loop muted playsinline></video>
-        <div class="hint only3d">Chuột trái: xoay · Phải: di chuyển · Cuộn: zoom · F: canh giữa · 1–6: góc nhìn · R: tự xoay</div>
-        <div class="hint only-video">Space: phát/dừng · ←/→: lùi/tới 1 khung · [ ]: chậm/nhanh</div>
+        <div class="hint only3d">Chuột trái: xoay · Phải: di chuyển · Cuộn: zoom · F: canh giữa · R: tự xoay</div>
       </div>
 
       <!-- Cột Model B (So sánh song song đối đầu) -->
@@ -87,90 +85,40 @@
 
       <!-- Thanh điều khiển Timeline 360° (Scrub Bar) cho Task 2 -->
       <div id="timelineBar" class="timeline-bar hidden">
-          <div class="timeline-slider-row">
-            <button id="tlPlayBtn" class="btn sm primary tl-play-btn" title="Phát / Dừng quay (Space)">⏸</button>
-            <input id="tlScrubSlider" class="timeline-slider" type="range" min="0" max="360" step="1" value="0" title="Kéo để xoay đến góc bất kỳ" />
-            <div id="tlAngleLabel" class="timeline-angle-badge">0° · Chính diện (Front)</div>
+        <div class="timeline-slider-row">
+          <button id="tlPlayBtn" class="btn sm primary tl-play-btn" title="Phát / Dừng quay (Space)">⏸</button>
+          <input id="tlScrubSlider" class="timeline-slider" type="range" min="0" max="360" step="1" value="0" title="Kéo để xoay đến góc bất kỳ" />
+          <div id="tlAngleLabel" class="timeline-angle-badge">0° · Chính diện (Front)</div>
+        </div>
+        <div class="timeline-controls-row">
+          <div class="timeline-presets">
+            <span class="muted" style="font-size:12px;margin-right:3px">Góc chuẩn:</span>
+            <button class="btn sm tl-preset" data-angle="0">0° Chính diện</button>
+            <button class="btn sm tl-preset" data-angle="45">45° Bán diện</button>
+            <button class="btn sm tl-preset" data-angle="90">90° Góc nghiêng</button>
+            <button class="btn sm tl-preset" data-angle="180">180° Sau gáy</button>
+            <button class="btn sm tl-preset" data-angle="270">270° Nghiêng phải</button>
           </div>
-          <div class="timeline-controls-row">
-            <div class="timeline-presets">
-              <span class="muted" style="font-size:12px;margin-right:3px">Góc chuẩn:</span>
-              <button class="btn sm tl-preset" data-angle="0">0° Chính diện</button>
-              <button class="btn sm tl-preset" data-angle="45">45° Bán diện</button>
-              <button class="btn sm tl-preset" data-angle="90">90° Góc nghiêng</button>
-              <button class="btn sm tl-preset" data-angle="180">180° Sau gáy</button>
-              <button class="btn sm tl-preset" data-angle="270">270° Nghiêng phải</button>
-            </div>
-            <div class="timeline-actions">
-              <button id="tlRevBtn" class="btn sm" title="Đổi chiều xoay">⇄ Đổi chiều</button>
-              <select id="tlSpeedSelect" class="btn sm" title="Tốc độ quay">
-                <option value="4">Chậm (15s/vòng)</option>
-                <option value="6" selected>Chuẩn (10s/vòng)</option>
-                <option value="12">Nhanh (5s/vòng)</option>
-                <option value="20">Rất nhanh (3s/vòng)</option>
-              </select>
-              <button id="tlExportBtn" class="btn sm primary" title="Ghi hình 1 vòng quay 360° để xuất video tải về">🎥 Xuất Video 360°</button>
-            </div>
+          <div class="timeline-actions">
+            <button id="tlRevBtn" class="btn sm" title="Đổi chiều xoay">⇄ Đổi chiều</button>
+            <select id="tlSpeedSelect" class="btn sm" title="Tốc độ quay">
+              <option value="4">Chậm (15s/vòng)</option>
+              <option value="6" selected>Chuẩn (10s/vòng)</option>
+              <option value="12">Nhanh (5s/vòng)</option>
+              <option value="20">Rất nhanh (3s/vòng)</option>
+            </select>
+            <button id="tlExportBtn" class="btn sm primary" title="Ghi hình 1 vòng quay 360° để xuất video tải về">🎥 Xuất Video 360°</button>
           </div>
-          <div id="tlRecordStatus" class="muted hidden" style="font-size:12px;text-align:center;margin-top:2px">
-            Đang ghi hình… 0%
-          </div>
+        </div>
+        <div id="tlRecordStatus" class="muted hidden" style="font-size:12px;text-align:center;margin-top:2px">
+          Đang ghi hình… 0%
         </div>
       </div>
 
+      <!-- Panel điều khiển công cụ 3D (Chỉ hiển thị ở Task 1) -->
       <aside class="panel">
-
-        <section class="only-video">
-          <h3>Video 360°</h3>
-          <div class="row">
-            <span class="label">Tốc độ</span>
-            <select id="videoRate">
-              <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option>
-              <option value="1.5">1.5×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4×</option>
-            </select>
-          </div>
-          <div class="row">
-            <span class="label">Tua</span>
-            <input id="videoSeek" type="range" min="0" max="1" step="0.001" value="0" />
-          </div>
-          <label class="check"><input id="videoLoop" type="checkbox" checked /> Lặp lại</label>
-          <div class="row">
-            <button id="videoPlay" class="btn sm">Phát / Dừng</button>
-          </div>
-        </section>
-
         <section class="only3d">
-          <h3>Hướng vật thể</h3>
-          <select id="orientPreset">
-            <option value="">— Preset —</option>
-            <option value="identity">Y lên (mặc định)</option>
-            <option value="zup">Z lên → Y lên</option>
-            <option value="-zup">-Z lên → Y lên</option>
-            <option value="xup">X lên → Y lên</option>
-            <option value="opencv">OpenCV (Y xuống, Z tới) → OpenGL</option>
-            <option value="upsideDown">Lật ngược (giữ mặt trước)</option>
-            <option value="backward">Quay 180° (mặt sau → trước)</option>
-          </select>
-          <div class="row">
-            <span class="label">Bước</span>
-            <select id="rotStep">
-              <option>90</option><option>45</option><option>15</option><option>5</option>
-            </select>
-            <span class="muted">độ</span>
-          </div>
-          <div class="rot-grid">
-            <span>X</span><button data-rot="x,-1" class="btn sm">⟲</button><button data-rot="x,1" class="btn sm">⟳</button>
-            <span>Y</span><button data-rot="y,-1" class="btn sm">⟲</button><button data-rot="y,1" class="btn sm">⟳</button>
-            <span>Z</span><button data-rot="z,-1" class="btn sm">⟲</button><button data-rot="z,1" class="btn sm">⟳</button>
-          </div>
-          <div class="row">
-            <button id="resetOrient" class="btn sm">Đặt lại hướng</button>
-          </div>
-          <label class="check"><input id="keepOrient" type="checkbox" checked /> Giữ hướng này cho mọi mô hình</label>
-        </section>
-
-        <section class="only3d">
-          <h3>Góc nhìn camera</h3>
+          <h3>Góc nhìn Camera</h3>
           <div class="view-grid">
             <button data-view="front" class="btn sm">Trước</button>
             <button data-view="back" class="btn sm">Sau</button>
@@ -179,7 +127,7 @@
             <button data-view="top" class="btn sm">Trên</button>
             <button data-view="bottom" class="btn sm">Dưới</button>
           </div>
-          <div class="row">
+          <div class="row" style="margin-top:6px">
             <span class="label">FOV</span>
             <input id="fov" type="range" min="10" max="90" value="35" />
           </div>
@@ -196,16 +144,12 @@
           <div class="row">
             <span class="label">Chế độ</span>
             <select id="shading">
-              <option value="original">Texture / màu gốc</option>
-              <option value="shaded">Xám (hình học)</option>
-              <option value="normal">Pháp tuyến</option>
+              <option value="original">Texture / Màu gốc</option>
+              <option value="shaded">Xám (Hình học)</option>
+              <option value="normal">Pháp tuyến (Normal)</option>
             </select>
           </div>
-          <div class="row">
-            <span class="label">Texture</span>
-            <select id="textureSelect"><option value="">(theo file)</option></select>
-          </div>
-          <label class="check"><input id="wireframe" type="checkbox" /> Wireframe</label>
+          <label class="check"><input id="wireframe" type="checkbox" /> Wireframe (Khung lưới)</label>
           <label class="check"><input id="doubleSide" type="checkbox" checked /> Hiện cả 2 mặt</label>
           <div class="row">
             <span class="label">Cỡ điểm</span>
@@ -220,31 +164,30 @@
         <section>
           <h3>Cảnh</h3>
           <div class="row">
-            <span class="label">Nền</span>
+            <span class="label">Màu nền</span>
             <input id="bgColor" type="color" value="#1b1d22" />
           </div>
           <label class="check only3d"><input id="showGrid" type="checkbox" checked /> Lưới sàn</label>
-          <label class="check only3d"><input id="showAxes" type="checkbox" /> Trục XYZ</label>
-          <label class="check"><input id="showInset" type="checkbox" checked /> Ảnh chính diện ở góc</label>
-          <div class="row">
-            <button id="screenshot" class="btn sm">Chụp ảnh PNG</button>
+          <label class="check only3d"><input id="showAxes" type="checkbox" /> Trục toạ độ XYZ</label>
+          <div class="row" style="margin-top:4px">
+            <button id="screenshot" class="btn sm">📸 Chụp ảnh PNG</button>
           </div>
         </section>
 
         <section>
-          <h3>Thông tin</h3>
+          <h3>Thông tin mô hình</h3>
           <div id="info" class="info"></div>
         </section>
       </aside>
     </div>
   </section>
 
-  <!-- Xem ảnh của ID -->
+  <!-- Xem ảnh của ID (Lightbox) -->
   <div id="lightbox" class="lightbox hidden">
     <div class="lightbox-inner">
       <div class="lightbox-head">
         <strong id="lbTitle"></strong>
-        <span class="muted">Bấm vào ảnh nhỏ để đặt làm ảnh chính diện</span>
+        <span class="muted">Cuộn chuột để phóng to/thu nhỏ, kéo rê để di chuyển ảnh</span>
         <div class="lb-zoom-controls" aria-label="Điều chỉnh độ phóng ảnh">
           <button id="lbZoomOut" class="btn sm" type="button" title="Thu nhỏ ảnh">−</button>
           <button id="lbZoomReset" class="btn sm" type="button" title="Đặt lại kích thước">100%</button>
@@ -253,14 +196,11 @@
         </div>
         <button id="lbClose" class="btn sm">Đóng</button>
       </div>
-        <div id="lbImageViewport" class="lb-image-viewport">
-          <img id="lbMain" class="lb-main" alt="" />
-        </div>
-        <div id="lbThumbs" class="lb-thumbs"></div>
+      <div id="lbImageViewport" class="lb-image-viewport">
+        <img id="lbMain" class="lb-main" alt="" />
+      </div>
+      <div id="lbThumbs" class="lb-thumbs"></div>
     </div>
-  </div>
-
-  <div id="dropOverlay" class="drop-overlay hidden">Thả thư mục / file vào đây</div>
   </div>
 
   <script type="module" src="app.js"></script>

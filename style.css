@@ -223,8 +223,8 @@ input[type=color] { width: 44px; height: 28px; border: 1px solid var(--border); 
   cursor: pointer;
 }
 
-/* Ẩn các chi tiết thừa khi ở Task 2 */
-.viewer-body.task2-mode .sidebar { display: none !important; }
+/* Ẩn panel điều khiển khi ở Task 2 */
+.viewer-body.task2-mode .panel { display: none !important; }
 .viewer-body.task2-mode .inset { display: none !important; }
 .viewer-body.task2-mode .only3d { display: none !important; }
 .viewer-body.task2-mode .canvas-wrap .hint { display: none !important; }

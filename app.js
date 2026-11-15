@@ -1,5 +1,5 @@
 import { buildDataset, entriesFromDrop, entriesFromFileList, saveCoverOverride } from './dataset.js';
-import { Viewer, ORIENT_PRESETS } from './viewer.js';
+import { Viewer } from './viewer.js';
 import { fetchStaticManifest } from './server-api.js';
 
 const $ = (id) => document.getElementById(id);
@@ -516,7 +516,7 @@ function attachPreview(thumb, entry) {
     v.muted = true;
     v.loop = true;
     v.playsInline = true;
-    v.defaultPlaybackRate = v.playbackRate = +$('videoRate').value;
+    v.defaultPlaybackRate = v.playbackRate = 1;
     v.src = urlOf(entry);
     thumb.appendChild(v);
     v.play().catch(() => { /* bị chặn hoặc không giải mã được */ });
@@ -666,7 +666,6 @@ $('lbImageViewport').addEventListener('wheel', (e) => {
 function showGallery() {
   $('viewerView').classList.add('hidden');
   $('galleryView').classList.remove('hidden');
-  stopVideo();
   viewer?.clear();
   viewerB?.clear();
   $('canvasWrapB').classList.add('hidden');
@@ -687,15 +686,16 @@ function ensureViewer() {
   };
   // Khôi phục cài đặt đã lưu.
   const s = store.get('settings', {});
-  for (const [id, key] of [['shading', 'shading'], ['wireframe', 'wireframe'], ['doubleSide', 'doubleSide'], ['pointSize', 'pointSize'], ['light', 'light']]) {
+  const keys = [
+    ['shading', 'shading'], ['wireframe', 'wireframe'], ['doubleSide', 'doubleSide'],
+    ['pointSize', 'pointSize'], ['light', 'light'], ['bgColor', 'bg'],
+    ['showGrid', 'grid'], ['showAxes', 'axes'], ['fov', 'fov'],
+    ['autoRotate', 'autoRotate'], ['rotateSpeed', 'rotateSpeed']
+  ];
+  for (const [id, key] of keys) {
     if (s[key] === undefined) continue;
     const el = $(id);
-    if (el.type === 'checkbox') el.checked = s[key];
-    else el.value = s[key];
-  }
-  for (const [id, key] of [['bgColor', 'bg'], ['showGrid', 'grid'], ['showAxes', 'axes'], ['showInset', 'inset'], ['fov', 'fov'], ['keepOrient', 'keepOrient'], ['autoRotate', 'autoRotate'], ['rotateSpeed', 'rotateSpeed']]) {
-    if (s[key] === undefined) continue;
-    const el = $(id);
+    if (!el) continue;
     if (el.type === 'checkbox') el.checked = s[key];
     else el.value = s[key];
   }
@@ -704,78 +704,64 @@ function ensureViewer() {
 }
 
 function syncControls() {
-  viewer.settings.shading = $('shading').value;
-  viewer.settings.wireframe = $('wireframe').checked;
-  viewer.settings.doubleSide = $('doubleSide').checked;
-  viewer.settings.pointSize = +$('pointSize').value;
-  viewer.settings.light = +$('light').value;
+  if (!viewer) return;
+  if ($('shading')) viewer.settings.shading = $('shading').value;
+  if ($('wireframe')) viewer.settings.wireframe = $('wireframe').checked;
+  if ($('doubleSide')) viewer.settings.doubleSide = $('doubleSide').checked;
+  if ($('pointSize')) viewer.settings.pointSize = +$('pointSize').value;
+  if ($('light')) viewer.settings.light = +$('light').value;
   viewer.applySettings();
-  viewer.setBackground($('bgColor').value);
-  viewer.setGrid($('showGrid').checked);
-  viewer.setAxes($('showAxes').checked);
-  viewer.setFov(+$('fov').value);
-  viewer.setAutoRotate($('autoRotate').checked);
-  const rpm = +$('rotateSpeed').value;
-  viewer.setRotateSpeed(rpm);
-  $('rotateSpeedLabel').textContent = `${(60 / rpm).toFixed(1)} s/vòng`;
-  $('canvasWrap').style.setProperty('--video-bg', $('bgColor').value);
-  $('inset').classList.toggle('hidden', !$('showInset').checked);
+  if ($('bgColor')) viewer.setBackground($('bgColor').value);
+  if ($('showGrid')) viewer.setGrid($('showGrid').checked);
+  if ($('showAxes')) viewer.setAxes($('showAxes').checked);
+  if ($('fov')) viewer.setFov(+$('fov').value);
+  if ($('autoRotate')) viewer.setAutoRotate($('autoRotate').checked);
+  if ($('rotateSpeed')) {
+    const rpm = +$('rotateSpeed').value;
+    viewer.setRotateSpeed(rpm);
+    if ($('rotateSpeedLabel')) $('rotateSpeedLabel').textContent = `${(60 / rpm).toFixed(1)} s/vòng`;
+  }
 }
 
 function saveSettings() {
   store.set('settings', {
-    shading: $('shading').value,
-    wireframe: $('wireframe').checked,
-    doubleSide: $('doubleSide').checked,
-    pointSize: +$('pointSize').value,
-    light: +$('light').value,
-    bg: $('bgColor').value,
-    grid: $('showGrid').checked,
-    axes: $('showAxes').checked,
-    inset: $('showInset').checked,
-    fov: +$('fov').value,
-    keepOrient: $('keepOrient').checked,
-    autoRotate: $('autoRotate').checked,
-    rotateSpeed: +$('rotateSpeed').value,
+    shading: $('shading')?.value || 'original',
+    wireframe: $('wireframe')?.checked ?? false,
+    doubleSide: $('doubleSide')?.checked ?? true,
+    pointSize: +($('pointSize')?.value || 1),
+    light: +($('light')?.value || 1),
+    bg: $('bgColor')?.value || '#1b1d22',
+    grid: $('showGrid')?.checked ?? true,
+    axes: $('showAxes')?.checked ?? false,
+    fov: +($('fov')?.value || 35),
+    autoRotate: $('autoRotate')?.checked ?? false,
+    rotateSpeed: +($('rotateSpeed')?.value || 12),
   });
 }
 
-for (const id of ['shading', 'wireframe', 'doubleSide', 'pointSize', 'light', 'bgColor', 'showGrid', 'showAxes', 'showInset', 'fov', 'autoRotate', 'rotateSpeed', 'keepOrient']) {
-  $(id).addEventListener('input', () => {
-    if (!viewer) return;
-    syncControls();
-    saveSettings();
-  });
+for (const id of ['shading', 'wireframe', 'doubleSide', 'pointSize', 'light', 'bgColor', 'showGrid', 'showAxes', 'fov', 'autoRotate', 'rotateSpeed']) {
+  const el = $(id);
+  if (el) {
+    el.addEventListener('input', () => {
+      if (!viewer) return;
+      syncControls();
+      saveSettings();
+    });
+  }
 }
 
 async function openModel(group, model) {
   ensureViewer();
   $('galleryView').classList.add('hidden');
   $('viewerView').classList.remove('hidden');
-  viewer.resize();
   state.current = { group, model };
 
   $('viewerTitle').textContent = group.id;
-  $('inset').src = group.cover ? urlOf(group.cover) : '';
   renderFileTabs();
-  renderTextureOptions(group);
   updateViewerForTask();
 
-  const isVideo = model.kind === 'video';
-  document.querySelector('.viewer-body').classList.toggle('video-mode', isVideo);
   $('error').classList.add('hidden');
   $('info').replaceChildren();
-  if (isVideo) {
-    // Huỷ mô hình đang tải/đang hiển thị để giải phóng bộ nhớ.
-    viewer.loadToken++;
-    viewer.clear();
-    openVideo(model);
-    return;
-  }
-  stopVideo();
-
-  // Hướng: dùng hướng đã lưu nếu bật "giữ hướng".
-  viewer.setOrientation($('keepOrient').checked ? store.get('orientation', [0, 0, 0, 1]) : [0, 0, 0, 1]);
 
   $('loading').classList.remove('hidden');
   try {
@@ -792,7 +778,6 @@ async function openModel(group, model) {
     if (state.current?.model === model) $('loading').classList.add('hidden');
   }
 }
-
 function renderFileTabs() {
   const { group, model } = state.current;
   const tabs = $('fileTabs');
@@ -808,16 +793,6 @@ function renderFileTabs() {
   }
 }
 
-function renderTextureOptions(group) {
-  const sel = $('textureSelect');
-  sel.replaceChildren(new Option('(theo file)', ''));
-  group.images.forEach((im, i) => sel.appendChild(new Option(im.name, String(i))));
-}
-$('textureSelect').addEventListener('change', () => {
-  if (!viewer || !state.current) return;
-  const i = $('textureSelect').value;
-  viewer.setOverrideTexture(i === '' ? null : state.current.group.images[+i].file);
-});
 
 function renderInfo(info) {
   const rows = [
@@ -861,124 +836,18 @@ $('backBtn').addEventListener('click', showGallery);
 $('prevId').addEventListener('click', () => stepId(-1));
 $('nextId').addEventListener('click', () => stepId(1));
 
-// Hướng vật thể
-function persistOrientation() {
-  if ($('keepOrient').checked) store.set('orientation', viewer.getOrientation());
-}
-document.querySelectorAll('[data-rot]').forEach((b) =>
-  b.addEventListener('click', () => {
-    const [axis, sign] = b.dataset.rot.split(',');
-    viewer.rotate(axis, +sign * +$('rotStep').value);
-    persistOrientation();
-  }),
-);
-$('orientPreset').addEventListener('change', () => {
-  const q = ORIENT_PRESETS[$('orientPreset').value];
-  if (q) {
-    viewer.setOrientation(q);
-    viewer.frame('front');
-    persistOrientation();
-  }
-  $('orientPreset').value = '';
-});
-$('resetOrient').addEventListener('click', () => {
-  viewer.setOrientation(ORIENT_PRESETS.identity);
-  viewer.frame('front');
-  persistOrientation();
-});
-$('keepOrient').addEventListener('change', persistOrientation);
-
 document.querySelectorAll('[data-view]').forEach((b) =>
-  b.addEventListener('click', () => viewer.frame(b.dataset.view)),
+  b.addEventListener('click', () => viewer?.frame(b.dataset.view)),
 );
 
-$('screenshot').addEventListener('click', () => {
+$('screenshot')?.addEventListener('click', () => {
+  if (!viewer) return;
   const a = document.createElement('a');
-  a.href = state.current?.model.kind === 'video' ? videoFrame() : viewer.screenshot();
+  a.href = viewer.screenshot();
   const { group, model } = state.current || {};
-  a.download = `${group?.id || 'view'}_${model?.name || ''}.png`.replace(/[\\/:*?"<>|]/g, '_');
+  a.download = `${group?.id || 'model'}_${model?.name || ''}.png`.replace(/[\\/:*?"<>|]/g, '_');
   a.click();
 });
-
-// ================================================================== video 360°
-
-const video = $('video');
-let seeking = false;
-
-function openVideo(entry) {
-  $('loading').classList.remove('hidden');
-  video.classList.remove('hidden');
-  video.loop = $('videoLoop').checked;
-  video.onloadedmetadata = () => {
-    if (state.current?.model !== entry) return;
-    $('loading').classList.add('hidden');
-    video.playbackRate = +$('videoRate').value;
-    renderInfo({
-      file: entry.path,
-      type: `Video 360° (${entry.ext.toUpperCase()})`,
-      resolution: `${video.videoWidth} × ${video.videoHeight}`,
-      duration: fmtTime(video.duration),
-    });
-    video.play().catch(() => { /* autoplay bị chặn: người dùng bấm phát */ });
-  };
-  video.onerror = () => {
-    if (state.current?.model !== entry) return;
-    $('loading').classList.add('hidden');
-    $('error').textContent = `Không phát được ${entry.name}\nTrình duyệt không hỗ trợ codec của video này (thử MP4 H.264 hoặc WEBM).`;
-    $('error').classList.remove('hidden');
-  };
-  video.src = urlOf(entry);
-}
-
-function stopVideo() {
-  if (!video.getAttribute('src')) return;
-  video.pause();
-  video.onloadedmetadata = video.onerror = null;
-  video.removeAttribute('src');
-  video.load();
-  video.classList.add('hidden');
-}
-
-function videoFrame() {
-  const c = document.createElement('canvas');
-  c.width = video.videoWidth;
-  c.height = video.videoHeight;
-  c.getContext('2d').drawImage(video, 0, 0);
-  return c.toDataURL('image/png');
-}
-
-const fmtTime = (t) => (Number.isFinite(t) ? `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}` : '?');
-
-function setVideoRate(rate) {
-  $('videoRate').value = String(rate);
-  video.playbackRate = rate;
-  store.set('videoRate', rate);
-}
-$('videoRate').value = String(store.get('videoRate', 1));
-$('videoRate').addEventListener('change', () => setVideoRate(+$('videoRate').value));
-$('videoLoop').addEventListener('change', () => { video.loop = $('videoLoop').checked; });
-$('videoPlay').addEventListener('click', () => (video.paused ? video.play() : video.pause()));
-video.addEventListener('timeupdate', () => {
-  if (!seeking && video.duration) $('videoSeek').value = video.currentTime / video.duration;
-});
-$('videoSeek').addEventListener('input', () => {
-  seeking = true;
-  if (video.duration) video.currentTime = +$('videoSeek').value * video.duration;
-});
-$('videoSeek').addEventListener('change', () => { seeking = false; });
-
-function stepFrame(dir) {
-  video.pause();
-  video.currentTime = Math.min(Math.max(video.currentTime + dir / 30, 0), video.duration || 0);
-}
-function stepRate(dir) {
-  const rates = [...$('videoRate').options].map((o) => +o.value);
-  const i = rates.indexOf(+$('videoRate').value);
-  setVideoRate(rates[Math.min(Math.max(i + dir, 0), rates.length - 1)]);
-}
-
-// Phím tắt
-const VIEW_KEYS = { 1: 'front', 2: 'back', 3: 'left', 4: 'right', 5: 'top', 6: 'bottom' };
 window.addEventListener('keydown', (e) => {
   if (e.target.matches('input[type=search], input[type=text]')) return;
   if (e.key === 'Escape') {
@@ -989,15 +858,6 @@ window.addEventListener('keydown', (e) => {
   if (!state.current) return;
   if (e.key === 'PageDown') return stepId(1);
   if (e.key === 'PageUp') return stepId(-1);
-  if (state.current.model.kind === 'video') {
-    if (e.target === video || e.target.matches('select, input')) return;
-    if (e.key === ' ') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
-    else if (e.key === 'ArrowLeft') stepFrame(-1);
-    else if (e.key === 'ArrowRight') stepFrame(1);
-    else if (e.key === '[') stepRate(-1);
-    else if (e.key === ']') stepRate(1);
-    return;
-  }
   if (state.currentTask === 'video') {
     if (e.target.matches('select, input')) return;
     if (e.key === ' ') {
@@ -1024,26 +884,15 @@ window.addEventListener('keydown', (e) => {
 });
 
 
-// Tự động kiểm tra và tải dữ liệu tĩnh (GitHub Pages) hoặc backend server
+// Tự động kiểm tra và tải dữ liệu tĩnh (GitHub Pages)
 async function initAutoLoad() {
   try {
     const staticEntries = await fetchStaticManifest();
     if (staticEntries && staticEntries.length > 0) {
       loadEntries(staticEntries);
-      return;
     }
   } catch (e) {
     console.debug('No static manifest found:', e);
-  }
-
-  try {
-    const datasets = await fetchDatasets();
-    if (datasets && datasets.length > 0) {
-      loadServerDataset(datasets[0]);
-    }
-  } catch {
-    serverBtn?.classList.add('hidden');
-    uploadFolderInput?.parentElement?.classList.add('hidden');
   }
 }
 initAutoLoad();
