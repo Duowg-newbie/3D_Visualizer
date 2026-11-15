@@ -147,12 +147,12 @@ $('taskTabVideo').classList.toggle('active', state.currentTask === 'video');
 
 function formatAngleBadge(deg) {
   let note = '';
-  if (deg >= 350 || deg <= 10) note = ' · Chính diện (Front)';
-  else if (deg >= 35 && deg <= 55) note = ' · Bán diện trái (45°)';
-  else if (deg >= 80 && deg <= 100) note = ' · Góc nghiêng trái (90°)';
-  else if (deg >= 170 && deg <= 190) note = ' · Sau gáy (180°)';
-  else if (deg >= 260 && deg <= 280) note = ' · Góc nghiêng phải (270°)';
-  else if (deg >= 305 && deg <= 325) note = ' · Bán diện phải (315°)';
+  if (deg >= 350 || deg <= 10) note = ' · Chính diện';
+  else if (deg >= 35 && deg <= 55) note = ' · Bán diện 45°';
+  else if (deg >= 80 && deg <= 100) note = ' · Nghiêng 90°';
+  else if (deg >= 170 && deg <= 190) note = ' · Sau gáy 180°';
+  else if (deg >= 260 && deg <= 280) note = ' · Nghiêng 270°';
+  else if (deg >= 305 && deg <= 325) note = ' · Bán diện 315°';
   return `${deg}°${note}`;
 }
 
@@ -199,6 +199,7 @@ function updateViewerForTask() {
     }
   } else {
     // Trở về Task 1: Khảo sát 3D tự do
+    viewerBody.classList.remove('has-model-b');
     $('canvasWrapB').classList.add('hidden');
     viewerB?.clear();
     if (!isVideoFile) {
@@ -266,8 +267,10 @@ $('task2SelectB').addEventListener('change', () => {
 
 async function loadModelB(group, modelPath) {
   const wrapB = $('canvasWrapB');
+  const viewerBody = document.querySelector('.viewer-body');
   if (!modelPath) {
     wrapB.classList.add('hidden');
+    viewerBody?.classList.remove('has-model-b');
     viewerB?.clear();
     viewer.resize();
     return;
@@ -276,12 +279,14 @@ async function loadModelB(group, modelPath) {
   const modelB = group.models.find(m => m.path === modelPath);
   if (!modelB) {
     wrapB.classList.add('hidden');
+    viewerBody?.classList.remove('has-model-b');
     viewerB?.clear();
     viewer.resize();
     return;
   }
 
   wrapB.classList.remove('hidden');
+  viewerBody?.classList.add('has-model-b');
   $('modelTagBName').textContent = modelB.modelName || 'Model B';
   const vb = ensureViewerB();
   vb.resize();
@@ -328,21 +333,6 @@ $('tlScrubSlider').addEventListener('input', (e) => {
   viewer.setYawDeg(deg);
   viewerB?.setYawDeg(deg);
   $('tlAngleLabel').textContent = formatAngleBadge(deg);
-});
-
-// Các nút góc chuẩn (Presets)
-document.querySelectorAll('.tl-preset').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    if (!viewer) return;
-    viewer.setAutoRotate(false);
-    viewerB?.setAutoRotate(false);
-    $('tlPlayBtn').textContent = '▶';
-    const angle = +btn.dataset.angle;
-    viewer.setYawDeg(angle);
-    viewerB?.setYawDeg(angle);
-    $('tlScrubSlider').value = angle;
-    $('tlAngleLabel').textContent = formatAngleBadge(angle);
-  });
 });
 
 $('tlRevBtn').addEventListener('click', () => {
@@ -669,6 +659,7 @@ function showGallery() {
   viewer?.clear();
   viewerB?.clear();
   $('canvasWrapB').classList.add('hidden');
+  document.querySelector('.viewer-body')?.classList.remove('has-model-b');
   state.current = null;
 }
 

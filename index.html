@@ -68,50 +68,38 @@
         <img id="task2CompareImg" class="task2-compare-img" alt="Ảnh gốc đối chiếu" />
       </div>
 
-      <!-- Cột Model A -->
-      <div id="canvasWrap" class="canvas-wrap">
-        <div id="task2ModelTag" class="pane-tag hidden">🎬 Model A: <span id="modelTagAName">HQ-Head</span></div>
-        <div id="loading" class="loading hidden">Đang tải…</div>
-        <div id="error" class="error hidden"></div>
-        <div class="hint only3d">Chuột trái: xoay · Phải: di chuyển · Cuộn: zoom · F: canh giữa · R: tự xoay</div>
-      </div>
+      <!-- Không gian hiển thị mô hình 3D -->
+      <div id="viewersStage" class="viewers-stage">
+        <!-- Cột Model A -->
+        <div id="canvasWrap" class="canvas-wrap">
+          <div id="task2ModelTag" class="pane-tag hidden">🎬 Model A: <span id="modelTagAName">HQ-Head</span></div>
+          <div id="loading" class="loading hidden">Đang tải…</div>
+          <div id="error" class="error hidden"></div>
+          <div class="hint only3d">Chuột trái: xoay · Phải: di chuyển · Cuộn: zoom · F: canh giữa · R: tự xoay</div>
+        </div>
 
-      <!-- Cột Model B (So sánh song song đối đầu) -->
-      <div id="canvasWrapB" class="canvas-wrap hidden">
-        <div class="pane-tag">🎬 Model B: <span id="modelTagBName">Đối chứng</span></div>
-        <div id="loadingB" class="loading hidden">Đang tải Model B…</div>
-        <div id="errorB" class="error hidden"></div>
-      </div>
+        <!-- Cột Model B (So sánh song song đối đầu) -->
+        <div id="canvasWrapB" class="canvas-wrap hidden">
+          <div class="pane-tag">🎬 Model B: <span id="modelTagBName">Đối chứng</span></div>
+          <div id="loadingB" class="loading hidden">Đang tải Model B…</div>
+          <div id="errorB" class="error hidden"></div>
+        </div>
 
-      <!-- Thanh điều khiển Timeline 360° (Scrub Bar) cho Task 2 -->
-      <div id="timelineBar" class="timeline-bar hidden">
-        <div class="timeline-slider-row">
+        <!-- Thanh điều khiển Timeline 360° tinh gọn cho Task 2 -->
+        <div id="timelineBar" class="timeline-bar hidden">
           <button id="tlPlayBtn" class="btn sm primary tl-play-btn" title="Phát / Dừng quay (Space)">⏸</button>
           <input id="tlScrubSlider" class="timeline-slider" type="range" min="0" max="360" step="1" value="0" title="Kéo để xoay đến góc bất kỳ" />
-          <div id="tlAngleLabel" class="timeline-angle-badge">0° · Chính diện (Front)</div>
-        </div>
-        <div class="timeline-controls-row">
-          <div class="timeline-presets">
-            <span class="muted" style="font-size:12px;margin-right:3px">Góc chuẩn:</span>
-            <button class="btn sm tl-preset" data-angle="0">0° Chính diện</button>
-            <button class="btn sm tl-preset" data-angle="45">45° Bán diện</button>
-            <button class="btn sm tl-preset" data-angle="90">90° Góc nghiêng</button>
-            <button class="btn sm tl-preset" data-angle="180">180° Sau gáy</button>
-            <button class="btn sm tl-preset" data-angle="270">270° Nghiêng phải</button>
-          </div>
-          <div class="timeline-actions">
-            <button id="tlRevBtn" class="btn sm" title="Đổi chiều xoay">⇄ Đổi chiều</button>
-            <select id="tlSpeedSelect" class="btn sm" title="Tốc độ quay">
-              <option value="4">Chậm (15s/vòng)</option>
-              <option value="6" selected>Chuẩn (10s/vòng)</option>
-              <option value="12">Nhanh (5s/vòng)</option>
-              <option value="20">Rất nhanh (3s/vòng)</option>
-            </select>
-            <button id="tlExportBtn" class="btn sm primary" title="Ghi hình 1 vòng quay 360° để xuất video tải về">🎥 Xuất Video 360°</button>
-          </div>
-        </div>
-        <div id="tlRecordStatus" class="muted hidden" style="font-size:12px;text-align:center;margin-top:2px">
-          Đang ghi hình… 0%
+          <div id="tlAngleLabel" class="timeline-angle-badge">0° · Chính diện</div>
+          <div class="timeline-sep"></div>
+          <button id="tlRevBtn" class="btn sm" title="Đổi chiều xoay">⇄ Đổi chiều</button>
+          <select id="tlSpeedSelect" class="btn sm" title="Tốc độ quay">
+            <option value="4">15s/vòng</option>
+            <option value="6" selected>10s/vòng</option>
+            <option value="12">5s/vòng</option>
+            <option value="20">3s/vòng</option>
+          </select>
+          <button id="tlExportBtn" class="btn sm primary" title="Ghi hình 1 vòng quay 360° để xuất video tải về">🎥 Xuất video</button>
+          <div id="tlRecordStatus" class="tl-record-status hidden">Đang ghi… 0%</div>
         </div>
       </div>
 
