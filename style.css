@@ -176,16 +176,43 @@ input[type=color] { width: 44px; height: 28px; border: 1px solid var(--border); 
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  padding: 24px;
+  padding: 0;
+  cursor: grab;
+  user-select: none;
+}
+.task2-compare-pane.dragging {
+  cursor: grabbing;
 }
 .task2-compare-img {
-  max-width: 100%;
-  max-height: 80vh;
+  max-width: 90%;
+  max-height: 85vh;
   object-fit: contain;
   border-radius: 10px;
   border: 1px solid var(--border);
   box-shadow: 0 8px 32px rgba(0,0,0,0.6);
   user-select: none;
+  pointer-events: none;
+  will-change: transform;
+  transform-origin: center center;
+}
+.task2-zoom-controls {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(20, 24, 33, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 3px 6px;
+}
+.task2-zoom-controls .btn {
+  padding: 3px 8px;
+  font-size: 11px;
 }
 
 .task2-compare-selects {
@@ -246,7 +273,7 @@ input[type=color] { width: 44px; height: 28px; border: 1px solid var(--border); 
   bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
-  width: min(620px, 94%);
+  width: min(520px, 92%);
   background: rgba(18, 21, 28, 0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);

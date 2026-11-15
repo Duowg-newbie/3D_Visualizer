@@ -30,8 +30,7 @@ function ensureViewerB() {
   viewerB = new Viewer($('canvasWrapB'));
   viewerB.onAngleChange = (deg) => {
     if (state.currentTask === 'video') {
-      $('tlScrubSlider').value = deg;
-      $('tlAngleLabel').textContent = formatAngleBadge(deg);
+      updateTimelineAngle(deg);
     }
   };
   return viewerB;
@@ -156,6 +155,16 @@ function formatAngleBadge(deg) {
   return `${deg}°${note}`;
 }
 
+function updateTimelineAngle(deg) {
+  const slider = $('tlScrubSlider');
+  if (slider) {
+    slider.value = deg;
+    slider.title = `Góc quay: ${formatAngleBadge(deg)}`;
+  }
+  const label = $('tlAngleLabel');
+  if (label) label.textContent = formatAngleBadge(deg);
+}
+
 function updateViewerForTask() {
   if (!viewer || !state.current) return;
   const isVideoTask = state.currentTask === 'video';
@@ -170,6 +179,7 @@ function updateViewerForTask() {
   $('task2CompareSelects').classList.toggle('hidden', !isVideoTask);
 
   if (isVideoTask) {
+    resetTask2Zoom();
     // Nạp ảnh gốc đối chiếu vào cột bên trái
     const coverEntry = group.cover;
     $('task2CompareImg').src = coverEntry ? urlOf(coverEntry) : '';
@@ -194,8 +204,7 @@ function updateViewerForTask() {
         viewer.frame('front');
       }
       const curYaw = viewer.getCurrentYawDeg ? viewer.getCurrentYawDeg() : 0;
-      $('tlScrubSlider').value = curYaw;
-      $('tlAngleLabel').textContent = formatAngleBadge(curYaw);
+      updateTimelineAngle(curYaw);
     }
   } else {
     // Trở về Task 1: Khảo sát 3D tự do
@@ -265,6 +274,115 @@ $('task2SelectB').addEventListener('change', () => {
   loadModelB(state.current.group, state.currentModelBPath);
 });
 
+// ==================== Zoom & Pan cho Ảnh 2D đối chiếu trong Task 2 ====================
+let task2Zoom = 1;
+let task2Pan = { x: 0, y: 0 };
+
+function applyTask2Transform() {
+  const img = $('task2CompareImg');
+  if (img) {
+    img.style.transform = `translate(${task2Pan.x}px, ${task2Pan.y}px) scale(${task2Zoom})`;
+  }
+  const resetBtn = $('task2ZoomReset');
+  if (resetBtn) {
+    resetBtn.textContent = task2Zoom === 1 ? '100%' : `${Math.round(task2Zoom * 100)}%`;
+  }
+}
+
+function setTask2Zoom(zoom, pivotX, pivotY) {
+  const oldZoom = task2Zoom;
+  task2Zoom = Math.min(6, Math.max(0.4, zoom));
+  if (pivotX !== undefined && oldZoom !== task2Zoom) {
+    const scale = task2Zoom / oldZoom;
+    task2Pan.x = pivotX + (task2Pan.x - pivotX) * scale;
+    task2Pan.y = pivotY + (task2Pan.y - pivotY) * scale;
+  }
+  if (task2Zoom === 1) {
+    task2Pan.x = 0;
+    task2Pan.y = 0;
+  }
+  applyTask2Transform();
+}
+
+function resetTask2Zoom() {
+  task2Zoom = 1;
+  task2Pan = { x: 0, y: 0 };
+  applyTask2Transform();
+}
+
+$('task2ZoomIn')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setTask2Zoom(task2Zoom + 0.25);
+});
+$('task2ZoomOut')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setTask2Zoom(task2Zoom - 0.25);
+});
+$('task2ZoomReset')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  resetTask2Zoom();
+});
+
+const pane2D = $('task2ComparePane');
+if (pane2D) {
+  // Zoom bằng con lăn chuột (wheel) với pivot tại vị trí chuột
+  pane2D.addEventListener('wheel', (e) => {
+    if (pane2D.classList.contains('hidden')) return;
+    e.preventDefault();
+    const rect = pane2D.getBoundingClientRect();
+    const pivotX = e.clientX - rect.left - rect.width / 2;
+    const pivotY = e.clientY - rect.top - rect.height / 2;
+    setTask2Zoom(task2Zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), pivotX, pivotY);
+  }, { passive: false });
+
+  // Double-click để đặt lại 100%
+  pane2D.addEventListener('dblclick', (e) => {
+    if (e.target.closest('.task2-zoom-controls')) return;
+    resetTask2Zoom();
+  });
+
+  // Kéo thả (Pan) bằng chuột
+  let dragging = false, startX = 0, startY = 0, startPanX = 0, startPanY = 0;
+  pane2D.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || e.target.closest('.task2-zoom-controls')) return;
+    dragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startPanX = task2Pan.x;
+    startPanY = task2Pan.y;
+    pane2D.classList.add('dragging');
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    task2Pan.x = startPanX + (e.clientX - startX);
+    task2Pan.y = startPanY + (e.clientY - startY);
+    applyTask2Transform();
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    pane2D.classList.remove('dragging');
+  });
+
+  // Hỗ trợ cảm ứng (touch)
+  let touch0 = null;
+  pane2D.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1 || e.target.closest('.task2-zoom-controls')) return;
+    touch0 = e.touches[0];
+    startPanX = task2Pan.x;
+    startPanY = task2Pan.y;
+  }, { passive: false });
+  pane2D.addEventListener('touchmove', (e) => {
+    if (!touch0 || e.touches.length !== 1) return;
+    task2Pan.x = startPanX + (e.touches[0].clientX - touch0.clientX);
+    task2Pan.y = startPanY + (e.touches[0].clientY - touch0.clientY);
+    applyTask2Transform();
+    e.preventDefault();
+  }, { passive: false });
+  pane2D.addEventListener('touchend', () => { touch0 = null; });
+}
+
 async function loadModelB(group, modelPath) {
   const wrapB = $('canvasWrapB');
   const viewerBody = document.querySelector('.viewer-body');
@@ -332,7 +450,7 @@ $('tlScrubSlider').addEventListener('input', (e) => {
   const deg = +e.target.value;
   viewer.setYawDeg(deg);
   viewerB?.setYawDeg(deg);
-  $('tlAngleLabel').textContent = formatAngleBadge(deg);
+  updateTimelineAngle(deg);
 });
 
 $('tlRevBtn').addEventListener('click', () => {
@@ -668,8 +786,7 @@ function ensureViewer() {
   viewer = new Viewer($('canvasWrap'));
   viewer.onAngleChange = (deg) => {
     if (state.currentTask === 'video') {
-      $('tlScrubSlider').value = deg;
-      $('tlAngleLabel').textContent = formatAngleBadge(deg);
+      updateTimelineAngle(deg);
       if (viewerB && viewerB.object) {
         viewerB.setYawDeg(deg);
       }
@@ -862,8 +979,7 @@ window.addEventListener('keydown', (e) => {
       const step = e.key === 'ArrowLeft' ? -5 : 5;
       let newDeg = (viewer.getCurrentYawDeg() + step + 360) % 360;
       viewer.setYawDeg(newDeg);
-      $('tlScrubSlider').value = newDeg;
-      $('tlAngleLabel').textContent = formatAngleBadge(newDeg);
+      updateTimelineAngle(newDeg);
       return;
     }
   }

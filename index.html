@@ -65,6 +65,11 @@
       <!-- Cột so sánh ảnh gốc 2D (Chỉ hiển thị ở Task 2) -->
       <div id="task2ComparePane" class="task2-compare-pane hidden">
         <div class="pane-tag">📷 Ảnh gốc (Input 2D)</div>
+        <div class="task2-zoom-controls">
+          <button id="task2ZoomOut" class="btn sm" type="button" title="Thu nhỏ ảnh (−)">−</button>
+          <button id="task2ZoomReset" class="btn sm" type="button" title="Đặt lại 100% (hoặc nhấp đúp)">100%</button>
+          <button id="task2ZoomIn" class="btn sm" type="button" title="Phóng to ảnh (+)">+</button>
+        </div>
         <img id="task2CompareImg" class="task2-compare-img" alt="Ảnh gốc đối chiếu" />
       </div>
 
@@ -89,7 +94,6 @@
         <div id="timelineBar" class="timeline-bar hidden">
           <button id="tlPlayBtn" class="btn sm primary tl-play-btn" title="Phát / Dừng quay (Space)">⏸</button>
           <input id="tlScrubSlider" class="timeline-slider" type="range" min="0" max="360" step="1" value="0" title="Kéo để xoay đến góc bất kỳ" />
-          <div id="tlAngleLabel" class="timeline-angle-badge">0° · Chính diện</div>
           <div class="timeline-sep"></div>
           <button id="tlRevBtn" class="btn sm" title="Đổi chiều xoay">⇄ Đổi chiều</button>
           <select id="tlSpeedSelect" class="btn sm" title="Tốc độ quay">
