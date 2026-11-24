@@ -8,6 +8,7 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { PCDLoader } from 'three/addons/loaders/PCDLoader.js';
 import { XYZLoader } from 'three/addons/loaders/XYZLoader.js';
+import { VIDEO_EXT } from './dataset.js';
 
 const SPLAT_EXT = new Set(['splat', 'ksplat', 'spz']);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -23,13 +24,12 @@ async function resolveFile(entry) {
   const res = await fetch(entry.serverUrl);
   if (!res.ok) throw new Error(`Không tải được ${entry.serverUrl} (${res.status})`);
   const blob = await res.blob();
-  // Gắn thêm thuộc tính .text() và .arrayBuffer() như File
   blob.name = entry.name;
   return blob;
 }
 
 /**
- * Trả về URL để three.js loader có thể load trực tiếp:
+ * Trả về URL để loader / video có thể load trực tiếp:
  * - Entry local → blob URL
  * - Entry server → HTTP URL trực tiếp
  */
@@ -48,23 +48,57 @@ const VIEW_DIRS = {
   bottom: [0, -1, 0.0001],
 };
 
-export const ORIENT_PRESETS = {
-  identity: new THREE.Quaternion(),
-  zup: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2),
-  '-zup': new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2),
-  xup: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2),
-  opencv: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI),
-  upsideDown: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI),
-  backward: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI),
-};
-
 export class Viewer {
   constructor(container) {
     this.container = container;
+
+    // Canvas 3D (Three.js WebGL)
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
+
+    // Phần tử Video 360° chuyên dụng (khi xem video thay vì mesh 3D)
+    this.video = document.createElement('video');
+    this.video.className = 'video-player hidden';
+    this.video.playsInline = true;
+    this.video.muted = true;
+    this.video.loop = true;
+    this.video.preload = 'auto';
+    container.appendChild(this.video);
+
+    this.isVideo = false;
+
+    // Cho phép kéo chuột trên video để xoay góc 360° hệt như xoay mô hình 3D!
+    let vDrag = false;
+    let vStartX = 0;
+    let vStartYaw = 0;
+
+    this.video.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      vDrag = true;
+      vStartX = e.clientX;
+      vStartYaw = this.getCurrentYawDeg();
+      this.spin.dragging = true;
+      if (this.spin.on) this.video.pause();
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!vDrag) return;
+      const dx = e.clientX - vStartX;
+      let deg = (vStartYaw - dx * 0.5) % 360;
+      if (deg < 0) deg += 360;
+      this.setYawDeg(deg);
+      if (this.onAngleChange) this.onAngleChange(deg);
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!vDrag) return;
+      vDrag = false;
+      this.spin.dragging = false;
+      if (this.spin.on) this.video.play().catch(() => {});
+    });
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color('#1b1d22');
@@ -76,6 +110,7 @@ export class Viewer {
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.12;
     this.controls.screenSpacePanning = true;
+
     // Tự xoay 360° theo thời gian thực (không phụ thuộc FPS), dừng khi người dùng đang kéo.
     this.spin = { on: false, rpm: 12, dir: 1, dragging: false };
     this.controls.addEventListener('start', () => { this.spin.dragging = true; });
@@ -109,7 +144,6 @@ export class Viewer {
     this.localBox = new THREE.Box3(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5));
     this.radius = 1;
     this.settings = { shading: 'original', wireframe: false, doubleSide: true, pointSize: 1, light: 1 };
-    this.overrideTexture = null;
     this.splatViewer = null;
     this.blobUrls = new Map();
     this.loadToken = 0;
@@ -123,6 +157,12 @@ export class Viewer {
     this.resize();
     this.renderer.setAnimationLoop(() => {
       const dt = Math.min(this.clock.getDelta(), 0.1);
+      if (this.isVideo) {
+        if (this.spin.on && !this.spin.dragging && this.video.duration && !this.video.paused) {
+          if (this.onAngleChange) this.onAngleChange(this.getCurrentYawDeg());
+        }
+        return;
+      }
       if (this.spin.on && !this.spin.dragging && this.object) {
         this.orbitBy((this.spin.dir || 1) * (this.spin.rpm / 60) * Math.PI * 2 * dt);
         if (this.onAngleChange) this.onAngleChange(this.getCurrentYawDeg());
@@ -150,12 +190,63 @@ export class Viewer {
   async load(entry, related) {
     const token = ++this.loadToken;
     await this.clear();
+
+    const ext = entry.ext;
+
+    // 1. Trường hợp file là Video 360° (mp4, webm, mov...)
+    if (entry.kind === 'video' || VIDEO_EXT.has(ext)) {
+      this.isVideo = true;
+      this.renderer.domElement.style.display = 'none';
+      this.video.classList.remove('hidden');
+
+      const src = directUrl(entry, this.blobUrls);
+      this.video.src = src;
+
+      await new Promise((resolve) => {
+        let finished = false;
+        const done = () => {
+          if (!finished) {
+            finished = true;
+            resolve();
+          }
+        };
+        this.video.onloadedmetadata = done;
+        this.video.onerror = done;
+        setTimeout(done, 2500);
+      });
+
+      if (token !== this.loadToken) return null;
+
+      this.setRotateSpeed(this.spin.rpm);
+      if (this.spin.on) {
+        this.video.play().catch(() => {});
+      } else {
+        this.video.pause();
+      }
+
+      const dur = this.video.duration || 0;
+      const w = this.video.videoWidth || 0;
+      const h = this.video.videoHeight || 0;
+
+      return {
+        file: entry.path,
+        type: `Video 360° (${ext.toUpperCase()})`,
+        resolution: w && h ? `${w} × ${h}` : 'Chuẩn MP4',
+        duration: dur ? `${dur.toFixed(1)}s` : 'Vòng lặp 360°',
+      };
+    }
+
+    // 2. Trường hợp file là Mô hình 3D (Mesh, Splat, Point Cloud)
+    this.isVideo = false;
+    this.video.classList.add('hidden');
+    this.video.pause();
+    this.renderer.domElement.style.display = 'block';
+
     // Map: tên file thường → entry (hỗ trợ cả local lẫn server)
     this.resourceEntries = new Map(related.map((r) => [r.name.toLowerCase(), r]));
     this.resources = new Map(related.map((r) => [r.name.toLowerCase(), r.file])); // legacy (local only)
     this.missing = new Set();
 
-    const ext = entry.ext;
     let object;
     const info = { file: entry.path, type: ext.toUpperCase() };
 
@@ -363,19 +454,6 @@ export class Viewer {
     this.applySettings();
   }
 
-  /** Chọn texture thủ công từ danh sách ảnh; null = theo file. */
-  async setOverrideTexture(file) {
-    this.overrideTexture?.dispose();
-    this.overrideTexture = file ? await this.loadTexture(file) : null;
-    if (this.overrideTexture) {
-      const mat = new THREE.MeshStandardMaterial({ map: this.overrideTexture, roughness: 0.8, metalness: 0 });
-      this.eachMesh((o) => { o.userData.override = o.geometry.attributes.uv ? mat : null; });
-    } else {
-      this.eachMesh((o) => { o.userData.override = null; });
-    }
-    this.applySettings();
-  }
-
   async clear() {
     if (this.splatViewer) {
       const v = this.splatViewer;
@@ -387,11 +465,18 @@ export class Viewer {
       this.content.remove(child);
       disposeObject(child);
     }
-    this.overrideTexture?.dispose();
-    this.overrideTexture = null;
     for (const url of this.blobUrls.values()) URL.revokeObjectURL(url);
     this.blobUrls.clear();
     this.object = null;
+
+    if (this.video) {
+      this.video.pause();
+      this.video.removeAttribute('src');
+      this.video.load();
+      this.video.classList.add('hidden');
+    }
+    this.isVideo = false;
+    this.renderer.domElement.style.display = 'block';
   }
 
   // ---------------------------------------------------------------- hiển thị
@@ -420,7 +505,7 @@ export class Viewer {
     this.eachMesh((o) => {
       if (s.shading === 'shaded') o.material = this.sharedMats.shaded;
       else if (s.shading === 'normal') o.material = this.sharedMats.normal;
-      else o.material = o.userData.override || o.userData.orig;
+      else o.material = o.userData.orig;
       for (const m of [o.material].flat()) {
         m.wireframe = s.wireframe;
         m.side = side;
@@ -444,15 +529,38 @@ export class Viewer {
   setBackground(color) { this.scene.background = new THREE.Color(color); }
   setGrid(v) { this.grid.visible = v; }
   setAxes(v) { this.axes.visible = v; }
-  setAutoRotate(v) { this.spin.on = v; }
-  /** Tốc độ tự xoay, đơn vị vòng/phút. */
-  setRotateSpeed(rpm) { this.spin.rpm = rpm; }
 
-  /** Chiều tự xoay: 1 = cùng chiều kim đồng hồ (từ trái qua phải), -1 = ngược lại */
-  setRotateDirection(dir) { this.spin.dir = dir; }
+  setAutoRotate(v) {
+    this.spin.on = v;
+    if (this.isVideo && this.video) {
+      if (v) this.video.play().catch(() => {});
+      else this.video.pause();
+    }
+  }
+
+  /** Tốc độ tự xoay, đơn vị vòng/phút. Tự động đồng bộ tốc độ video tương ứng. */
+  setRotateSpeed(rpm) {
+    this.spin.rpm = rpm;
+    if (this.isVideo && this.video && this.video.duration) {
+      const rate = (this.video.duration * rpm) / 60;
+      this.video.playbackRate = Math.max(0.1, Math.min(4.0, rate || 1));
+    }
+  }
+
+  /** Chiều tự xoay: 1 = cùng chiều kim đồng hồ, -1 = ngược lại */
+  setRotateDirection(dir) {
+    this.spin.dir = dir;
+  }
 
   /** Lấy góc quay hiện tại quanh trục thẳng đứng (0° đến 359°), trong đó 0° là chính diện. */
   getCurrentYawDeg() {
+    if (this.isVideo) {
+      if (!this.video || !this.video.duration) return 0;
+      const progress = this.video.currentTime / this.video.duration;
+      let deg = Math.round(progress * 360) % 360;
+      if (this.spin.dir === -1) deg = (360 - deg) % 360;
+      return (deg + 360) % 360;
+    }
     const t = this.controls?.target || { x: 0, y: 0, z: 0 };
     const dx = this.camera.position.x - t.x;
     const dz = this.camera.position.z - t.z;
@@ -461,10 +569,18 @@ export class Viewer {
     return deg;
   }
 
-  /** Đặt góc quay camera quanh trục thẳng đứng theo độ (0° đến 360°). */
+  /** Đặt góc quay camera hoặc seek frame video theo độ (0° đến 360°). */
   setYawDeg(deg) {
+    let norm = (Math.round(deg) % 360 + 360) % 360;
+    if (this.isVideo) {
+      if (!this.video || !this.video.duration) return;
+      if (this.spin.dir === -1) norm = (360 - norm) % 360;
+      const t = (norm / 360) * this.video.duration;
+      this.video.currentTime = Math.max(0, Math.min(this.video.duration - 0.001, t));
+      return;
+    }
     const t = this.controls?.target || new THREE.Vector3();
-    const rad = THREE.MathUtils.degToRad(deg);
+    const rad = THREE.MathUtils.degToRad(norm);
     const dx = this.camera.position.x - t.x;
     const dz = this.camera.position.z - t.z;
     const horizDist = Math.max(Math.hypot(dx, dz), this.radius || 1);
@@ -482,10 +598,18 @@ export class Viewer {
   }
 
   /**
-   * Quay tự động 1 vòng 360° và ghi hình qua MediaRecorder.
+   * Quay tự động 1 vòng 360° và xuất video tải về.
    * @returns {Promise<{blob: Blob, ext: string}>}
    */
   async recordTurntable(durationSec = 5, onProgress = () => {}) {
+    if (this.isVideo && this.video && this.video.src) {
+      onProgress(0.4);
+      const res = await fetch(this.video.src);
+      const blob = await res.blob();
+      onProgress(1.0);
+      return { blob, ext: 'mp4' };
+    }
+
     return new Promise((resolve, reject) => {
       const canvas = this.renderer.domElement;
       if (!canvas.captureStream) {
@@ -540,27 +664,10 @@ export class Viewer {
       }, 100);
     });
   }
+
   setFov(v) {
     this.camera.fov = v;
     this.camera.updateProjectionMatrix();
-  }
-
-  // ---------------------------------------------------------------- hướng & camera
-
-  getOrientation() { return this.pivot.quaternion.toArray(); }
-
-  setOrientation(q) {
-    if (Array.isArray(q)) this.pivot.quaternion.fromArray(q);
-    else this.pivot.quaternion.copy(q);
-    this.updateHelpers();
-  }
-
-  /** Xoay quanh trục thế giới (x|y|z) một góc (độ). */
-  rotate(axis, deg) {
-    const v = new THREE.Vector3(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
-    const q = new THREE.Quaternion().setFromAxisAngle(v, THREE.MathUtils.degToRad(deg));
-    this.pivot.quaternion.premultiply(q).normalize();
-    this.updateHelpers();
   }
 
   worldBox() {
@@ -579,6 +686,7 @@ export class Viewer {
   }
 
   frame(view = 'front') {
+    if (this.isVideo) return;
     const dir = new THREE.Vector3(...(VIEW_DIRS[view] || VIEW_DIRS.front)).normalize();
     const fov = THREE.MathUtils.degToRad(this.camera.fov);
     const fit = Math.min(fov, 2 * Math.atan(Math.tan(fov / 2) * this.camera.aspect));
@@ -592,6 +700,14 @@ export class Viewer {
   }
 
   screenshot() {
+    if (this.isVideo && this.video) {
+      const c = document.createElement('canvas');
+      c.width = this.video.videoWidth || 640;
+      c.height = this.video.videoHeight || 640;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(this.video, 0, 0, c.width, c.height);
+      return c.toDataURL('image/png');
+    }
     this.renderer.render(this.scene, this.camera);
     return this.renderer.domElement.toDataURL('image/png');
   }

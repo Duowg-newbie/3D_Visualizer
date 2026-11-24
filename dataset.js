@@ -169,14 +169,14 @@ export function buildDataset(entries, mode = 'auto') {
       g.coverImages = g.images.filter((im) => im.parts.some((part) => IMAGE_FOLDERS.test(part)));
       g.cover = pickCover(g.coverImages, rootName, g.id);
 
-      // Gắn modelName cho từng file 3D & lập bản đồ methods
+      // Gắn modelName cho từng file 3D / Video & lập bản đồ methods
       g.modelsByMethod = {};
-      for (const m of g.models) {
+      for (const m of [...g.models, ...g.videos]) {
         let mName = m.modelName;
         if (!mName && m.parts.length >= 5 && /^models?$/i.test(m.parts[1])) {
           mName = m.parts[2];
         }
-        if (!mName) mName = 'default';
+        if (!mName) mName = m.kind === 'video' ? 'Video 360°' : 'default';
         m.modelName = mName;
         g.modelsByMethod[mName] = m;
         allModelsSet.add(mName);

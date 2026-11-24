@@ -31,6 +31,9 @@ function ensureViewerB() {
   viewerB.onAngleChange = (deg) => {
     if (state.currentTask === 'video') {
       updateTimelineAngle(deg);
+      if (viewer && (viewer.object || viewer.isVideo)) {
+        viewer.setYawDeg(deg);
+      }
     }
   };
   return viewerB;
@@ -40,10 +43,8 @@ const imageUrls = new Map();
 /** Trả về URL để hiển thị/tải một entry (hỗ trợ cả file local lẫn server). */
 const urlOf = (entry) => {
   if (!entry) return '';
-  // Entry từ server: dùng URL HTTP trực tiếp.
   if (entry.isServer) return entry.serverUrl;
-  // Entry local: tạo object URL từ File.
-  const file = entry.file ?? entry; // tương thích cách gọi cũ urlOf(file)
+  const file = entry.file ?? entry;
   if (!imageUrls.has(file)) imageUrls.set(file, URL.createObjectURL(file));
   return imageUrls.get(file);
 };
@@ -56,52 +57,23 @@ function loadEntries(entries) {
   state.entries = entries;
   rebuild();
   showGallery();
-  // Chỉ có đúng một model/video => mở luôn.
   const ds = state.dataset;
   const only = ds.ids.length === 1 ? itemsOf(ds.ids[0]) : [];
   if (only.length === 1) openModel(ds.ids[0], only[0]);
 }
 
-/** Các mục xem được của một ID: file 3D trước, rồi video 360°. */
-const itemsOf = (g) => [...g.models, ...g.videos];
+/** Các mục xem được của một ID: file 3D và video 360°. */
+const itemsOf = (g) => [...(g.models || []), ...(g.videos || [])];
 
 function rebuild() {
-  state.dataset = buildDataset(state.entries, $('groupMode')?.value || 'auto');
+  state.dataset = buildDataset(state.entries, 'auto');
   renderGallery();
 }
 
-$('folderInput')?.addEventListener('change', (e) => {
-  if (e.target.files.length) loadEntries(entriesFromFileList(e.target.files));
-  e.target.value = '';
-});
-$('fileInput')?.addEventListener('change', (e) => {
-  if (e.target.files.length) loadEntries(entriesFromFileList(e.target.files));
-  e.target.value = '';
-});
-if ($('groupMode')) {
-  $('groupMode').addEventListener('change', () => {
-    store.set('groupMode', $('groupMode').value);
-    if (state.entries.length) rebuild();
-  });
-  $('groupMode').value = store.get('groupMode', 'auto');
-}
-
-
-
-// Kéo thả
-let dragDepth = 0;
-window.addEventListener('dragenter', (e) => {
-  e.preventDefault();
-  if (++dragDepth === 1) $('dropOverlay').classList.remove('hidden');
-});
-window.addEventListener('dragleave', () => {
-  if (--dragDepth <= 0) { dragDepth = 0; $('dropOverlay').classList.add('hidden'); }
-});
+// Hỗ trợ kéo thả file/thư mục an toàn
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', async (e) => {
   e.preventDefault();
-  dragDepth = 0;
-  $('dropOverlay').classList.add('hidden');
   const entries = await entriesFromDrop(e.dataTransfer);
   if (entries.length) loadEntries(entries);
 });
@@ -168,14 +140,13 @@ function updateTimelineAngle(deg) {
 function updateViewerForTask() {
   if (!viewer || !state.current) return;
   const isVideoTask = state.currentTask === 'video';
-  const isVideoFile = state.current.model.kind === 'video';
   const viewerBody = document.querySelector('.viewer-body');
   const group = state.current.group;
 
   viewerBody.classList.toggle('task2-mode', isVideoTask);
   $('task2ComparePane').classList.toggle('hidden', !isVideoTask);
   $('task2ModelTag').classList.toggle('hidden', !isVideoTask);
-  $('timelineBar').classList.toggle('hidden', !isVideoTask || isVideoFile);
+  $('timelineBar').classList.toggle('hidden', !isVideoTask);
   $('task2CompareSelects').classList.toggle('hidden', !isVideoTask);
 
   if (isVideoTask) {
@@ -185,33 +156,31 @@ function updateViewerForTask() {
     $('task2CompareImg').src = coverEntry ? urlOf(coverEntry) : '';
 
     // Cập nhật tên nhãn Model A
-    const mNameA = state.current.model.modelName || 'Model A';
+    const mNameA = state.current.model.modelName || (state.current.model.kind === 'video' ? 'Video 360°' : 'Model A');
     $('modelTagAName').textContent = mNameA;
 
     // Thiết lập danh sách chọn Model A và Model B
     setupTask2Selects(group);
 
-    if (!isVideoFile) {
-      // Hệ quy chiếu chuẩn hóa 360°: camera chính diện, tắt lưới sàn, tự động quay
-      viewer.setGrid(false);
-      viewer.setAxes(false);
-      if (viewer.setRotateDirection) viewer.setRotateDirection(1);
-      const speed = $('tlSpeedSelect') ? +$('tlSpeedSelect').value : 6;
-      viewer.setRotateSpeed(speed);
-      viewer.setAutoRotate(true);
-      $('tlPlayBtn').textContent = '⏸';
-      if (viewer.object) {
-        viewer.frame('front');
-      }
-      const curYaw = viewer.getCurrentYawDeg ? viewer.getCurrentYawDeg() : 0;
-      updateTimelineAngle(curYaw);
+    // Hệ quy chiếu chuẩn hóa 360°:
+    viewer.setGrid(false);
+    viewer.setAxes(false);
+    if (viewer.setRotateDirection) viewer.setRotateDirection(1);
+    const speed = $('tlSpeedSelect') ? +$('tlSpeedSelect').value : 6;
+    viewer.setRotateSpeed(speed);
+    viewer.setAutoRotate(true);
+    $('tlPlayBtn').textContent = '⏸';
+    if (!viewer.isVideo && viewer.object) {
+      viewer.frame('front');
     }
+    const curYaw = viewer.getCurrentYawDeg ? viewer.getCurrentYawDeg() : 0;
+    updateTimelineAngle(curYaw);
   } else {
     // Trở về Task 1: Khảo sát 3D tự do
     viewerBody.classList.remove('has-model-b');
     $('canvasWrapB').classList.add('hidden');
     viewerB?.clear();
-    if (!isVideoFile) {
+    if (!viewer.isVideo) {
       syncControls();
     }
   }
@@ -227,32 +196,35 @@ function setupTask2Selects(group) {
   const selA = $('task2SelectA');
   const selB = $('task2SelectB');
   const currentModelA = state.current.model;
+  const allOutputs = itemsOf(group);
   
   selA.replaceChildren();
-  for (const m of group.models) {
-    const opt = new Option(m.modelName || m.name, m.path);
+  for (const m of allOutputs) {
+    const icon = m.kind === 'video' ? '🎬' : '🧊';
+    const opt = new Option(`${icon} ${m.modelName || m.name}`, m.path);
     if (m === currentModelA) opt.selected = true;
     selA.appendChild(opt);
   }
 
   // Model B: có tuỳ chọn (Không so sánh)
   selB.replaceChildren(new Option('-- Không so sánh --', ''));
-  for (const m of group.models) {
+  for (const m of allOutputs) {
     if (m !== currentModelA) {
-      selB.appendChild(new Option(m.modelName || m.name, m.path));
+      const icon = m.kind === 'video' ? '🎬' : '🧊';
+      selB.appendChild(new Option(`${icon} ${m.modelName || m.name}`, m.path));
     }
   }
 
   // Nếu có từ 2 model trở lên và Model B chưa chọn, tự chọn model thứ 2
-  if (group.models.length >= 2 && !state.currentModelBPath) {
-    const secondModel = group.models.find(m => m !== currentModelA);
+  if (allOutputs.length >= 2 && !state.currentModelBPath) {
+    const secondModel = allOutputs.find(m => m !== currentModelA);
     if (secondModel) {
       state.currentModelBPath = secondModel.path;
       selB.value = secondModel.path;
     }
   }
 
-  if (state.currentModelBPath && group.models.some(m => m.path === state.currentModelBPath)) {
+  if (state.currentModelBPath && allOutputs.some(m => m.path === state.currentModelBPath)) {
     selB.value = state.currentModelBPath;
   } else {
     selB.value = '';
@@ -265,7 +237,7 @@ function setupTask2Selects(group) {
 
 $('task2SelectA').addEventListener('change', () => {
   const path = $('task2SelectA').value;
-  const m = state.current.group.models.find(x => x.path === path);
+  const m = itemsOf(state.current.group).find(x => x.path === path);
   if (m) openModel(state.current.group, m);
 });
 
@@ -394,7 +366,7 @@ async function loadModelB(group, modelPath) {
     return;
   }
 
-  const modelB = group.models.find(m => m.path === modelPath);
+  const modelB = itemsOf(group).find(m => m.path === modelPath);
   if (!modelB) {
     wrapB.classList.add('hidden');
     viewerBody?.classList.remove('has-model-b');
@@ -405,7 +377,7 @@ async function loadModelB(group, modelPath) {
 
   wrapB.classList.remove('hidden');
   viewerBody?.classList.add('has-model-b');
-  $('modelTagBName').textContent = modelB.modelName || 'Model B';
+  $('modelTagBName').textContent = modelB.modelName || (modelB.kind === 'video' ? 'Video 360°' : 'Model B');
   const vb = ensureViewerB();
   vb.resize();
   viewer.resize();
@@ -419,7 +391,7 @@ async function loadModelB(group, modelPath) {
     vb.setRotateDirection(viewer.spin.dir || 1);
     vb.setRotateSpeed(viewer.spin.rpm || 6);
     vb.setAutoRotate(viewer.spin.on);
-    vb.frame('front');
+    if (!vb.isVideo && vb.object) vb.frame('front');
     vb.setYawDeg(viewer.getCurrentYawDeg());
   } catch (err) {
     console.error(err);
@@ -515,7 +487,7 @@ function renderGallery() {
   const filterModel = $('modelFilterSelect')?.value || '';
   state.filtered = ds.ids.filter((g) => {
     if (q && !g.id.toLowerCase().includes(q)) return false;
-    if (filterModel && !g.models.some((m) => m.modelName === filterModel)) return false;
+    if (filterModel && !itemsOf(g).some((m) => m.modelName === filterModel)) return false;
     return true;
   });
   const nModels = ds.ids.reduce((n, g) => n + g.models.length, 0);
@@ -787,7 +759,7 @@ function ensureViewer() {
   viewer.onAngleChange = (deg) => {
     if (state.currentTask === 'video') {
       updateTimelineAngle(deg);
-      if (viewerB && viewerB.object) {
+      if (viewerB && (viewerB.object || viewerB.isVideo)) {
         viewerB.setYawDeg(deg);
       }
     }
@@ -956,6 +928,8 @@ $('screenshot')?.addEventListener('click', () => {
   a.download = `${group?.id || 'model'}_${model?.name || ''}.png`.replace(/[\\/:*?"<>|]/g, '_');
   a.click();
 });
+const VIEW_KEYS = { '1': 'front', '3': 'right', '7': 'top', '9': 'bottom' };
+
 window.addEventListener('keydown', (e) => {
   if (e.target.matches('input[type=search], input[type=text]')) return;
   if (e.key === 'Escape') {
@@ -974,11 +948,13 @@ window.addEventListener('keydown', (e) => {
       return;
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
-      viewer.setAutoRotate(false);
+      viewer?.setAutoRotate(false);
+      viewerB?.setAutoRotate(false);
       $('tlPlayBtn').textContent = '▶';
       const step = e.key === 'ArrowLeft' ? -5 : 5;
-      let newDeg = (viewer.getCurrentYawDeg() + step + 360) % 360;
-      viewer.setYawDeg(newDeg);
+      let newDeg = ((viewer?.getCurrentYawDeg() ?? 0) + step + 360) % 360;
+      viewer?.setYawDeg(newDeg);
+      viewerB?.setYawDeg(newDeg);
       updateTimelineAngle(newDeg);
       return;
     }
@@ -986,8 +962,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'r' || e.key === 'R') {
     $('autoRotate').checked = !$('autoRotate').checked;
     $('autoRotate').dispatchEvent(new Event('input'));
-  } else if (e.key === 'f' || e.key === 'F') viewer.frame('front');
-  else if (VIEW_KEYS[e.key]) viewer.frame(VIEW_KEYS[e.key]);
+  } else if (e.key === 'f' || e.key === 'F') viewer?.frame('front');
+  else if (VIEW_KEYS[e.key]) viewer?.frame(VIEW_KEYS[e.key]);
 });
 
 

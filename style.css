@@ -374,12 +374,11 @@ input[type=color] { width: 44px; height: 28px; border: 1px solid var(--border); 
 .error { color: var(--danger); white-space: pre-wrap; }
 .video-player {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
-  background: var(--video-bg, #000); z-index: 1;
+  background: #14161b; z-index: 1; cursor: grab; user-select: none;
 }
-/* Chế độ video: ẩn canvas 3D và các điều khiển chỉ dành cho 3D. */
-.viewer-body:not(.video-mode) .only-video,
-.viewer-body.video-mode .only3d,
-.viewer-body.video-mode .canvas-wrap canvas { display: none !important; }
+.video-player:active {
+  cursor: grabbing;
+}
 .viewer-body.video-mode .hint { bottom: 62px; }
 .speed-label { width: 64px; flex-shrink: 0; font-size: 12px; text-align: right; }
 .hint {
